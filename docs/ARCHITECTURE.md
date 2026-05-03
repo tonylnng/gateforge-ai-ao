@@ -1,6 +1,6 @@
 # Architecture
 
-This document explains the architecture of GateForge AI-AO in depth. For a higher-level overview, see [`README.md`](../README.md). For concept definitions, see [`CONCEPTS.md`](CONCEPTS.md).
+This document explains the architecture of GateForge AI-AO in depth. For a higher-level overview, see [`README.md`](../README.md). For concept definitions, see [`CONCEPTS.md`](CONCEPTS.md). For the specific question of **how AI-AO notifies agents like Manus or Perplexity Computer**, see [`AGENT-NOTIFICATION.md`](AGENT-NOTIFICATION.md).
 
 ---
 

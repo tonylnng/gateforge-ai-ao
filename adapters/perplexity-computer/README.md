@@ -30,6 +30,8 @@ Perplexity Computer is an API-accessible agent that excels at research, browsing
                                 └──────────────┘
 ```
 
+> **For the canonical end-to-end notification flow** (how a NATS message becomes an API call and a webhook becomes a NATS event), see [`docs/AGENT-NOTIFICATION.md`](../../docs/AGENT-NOTIFICATION.md).
+
 ## Why a webhook + adapter (not direct callback)
 
 Perplexity Computer can deliver long tasks. Polling is forbidden by AI-AO's third guarantee. So:

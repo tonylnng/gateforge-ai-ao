@@ -37,6 +37,8 @@ Use this adapter only when no API is available.
                         └────────────────────────┘
 ```
 
+> **For the canonical end-to-end notification flow** (how a NATS message becomes a Playwright action and a DOM event becomes a NATS event), see [`docs/AGENT-NOTIFICATION.md`](../../docs/AGENT-NOTIFICATION.md).
+
 ## Configuration
 
 | Env var                       | Purpose                                           |

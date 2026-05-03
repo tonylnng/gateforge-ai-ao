@@ -118,6 +118,7 @@ gateforge-ai-ao/
 │   ├── CONCEPTS.md                    # task envelopes, events, capabilities, etc.
 │   ├── GLOSSARY.md                    # every term, defined once
 │   ├── ROADMAP.md                     # phase-based build plan
+│   ├── AGENT-NOTIFICATION.md          # how AI-AO notifies adapters/agents (no polling)
 │   ├── ADMIN-PORTAL-UPGRADE.md        # upgrade plan for gateforge-admin-portal-site
 │   ├── adr/                           # architecture decision records
 │   └── diagrams/                      # source for diagrams (mermaid, drawio)
@@ -192,6 +193,7 @@ See [`docs/ROADMAP.md`](docs/ROADMAP.md) for the phase-by-phase build plan.
 | Set up a working stack | [`install/README.md`](install/README.md) |
 | Write a new adapter | [`adapters/_scaffold/`](adapters/_scaffold/) |
 | Look up a term | [`docs/GLOSSARY.md`](docs/GLOSSARY.md) |
+| Understand how agents are notified | [`docs/AGENT-NOTIFICATION.md`](docs/AGENT-NOTIFICATION.md) |
 | Upgrade the Admin Portal | [`docs/ADMIN-PORTAL-UPGRADE.md`](docs/ADMIN-PORTAL-UPGRADE.md) |
 
 ---
