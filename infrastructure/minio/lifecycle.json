@@ -1,0 +1,17 @@
+{
+  "Rules": [
+    {
+      "ID": "artifacts-expire-365d",
+      "Status": "Enabled",
+      "Filter": { "Prefix": "" },
+      "Expiration": { "Days": 365 },
+      "NoncurrentVersionExpiration": { "NoncurrentDays": 30 }
+    },
+    {
+      "ID": "logs-expire-30d",
+      "Status": "Enabled",
+      "Filter": { "Prefix": "logs/" },
+      "Expiration": { "Days": 30 }
+    }
+  ]
+}

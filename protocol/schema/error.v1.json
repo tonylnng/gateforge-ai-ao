@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gateforge.toniclab.ai/schema/error.v1.json",
+  "title": "AI-AO Error",
+  "type": "object",
+  "required": ["error_version", "code", "message", "retryable"],
+  "additionalProperties": false,
+  "properties": {
+    "error_version": { "type": "string", "pattern": "^1\\.[0-9]+$" },
+    "code": {
+      "type": "string",
+      "pattern": "^(protocol|platform|policy|verification|internal)\\.[a-z_]+$"
+    },
+    "message": { "type": "string", "minLength": 1, "maxLength": 4000 },
+    "retryable": { "type": "boolean" },
+    "retry_after_seconds": { "type": ["integer", "null"], "minimum": 0 },
+    "remediation_hint": { "type": ["string", "null"] },
+    "details": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  }
+}

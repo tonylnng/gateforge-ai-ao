@@ -1,0 +1,61 @@
+flowchart TB
+    subgraph GH["GitHub (per-project repo)"]
+        Issue[Issues]
+        Tasks[tasks/]
+        Agents[AGENTS.md]
+        Decisions[decisions/]
+    end
+
+    subgraph CP["AI-AO Control Plane (your VM)"]
+        Orch[Orchestrator]
+        Reg[Agent Registry<br/>NATS KV]
+        Pol[Policy Engine]
+        Ver[Verifier Engine]
+
+        subgraph BUS["NATS JetStream"]
+            T[project.*.task.*]
+            A[agent.*.heartbeat]
+            R[registry.*]
+            AU[audit.*]
+        end
+
+        subgraph AD["Adapters"]
+            OC[OpenClaw]
+            PC[Perplexity Computer]
+            MA[Manus]
+        end
+
+        subgraph ST["Storage"]
+            S3[MinIO]
+            PG[Postgres]
+            OT[OTel + Grafana]
+        end
+    end
+
+    subgraph EXT["External Agents"]
+        OCV[OpenClaw VMs]
+        PCS[Perplexity Computer SaaS]
+        MAS[Manus SaaS]
+    end
+
+    Issue -->|webhook| Orch
+    Orch -->|publish| BUS
+    Orch -->|read/write| Reg
+    Orch -->|consult| Pol
+    Orch -->|spawn| Ver
+    Orch -->|commit| GH
+
+    BUS --> OC
+    BUS --> PC
+    BUS --> MA
+
+    OC <-->|NATS native| OCV
+    PC -->|HTTPS API| PCS
+    MA -->|browser| MAS
+
+    OC -->|artifacts| S3
+    PC -->|artifacts| S3
+    MA -->|artifacts| S3
+
+    Orch -->|cost/audit| PG
+    BUS -->|traces| OT

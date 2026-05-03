@@ -1,0 +1,23 @@
+name: Adapter Conformance
+
+on:
+  pull_request:
+    paths:
+      - 'adapters/**'
+      - 'protocol/**'
+  workflow_dispatch:
+
+jobs:
+  conformance:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        adapter: [openclaw, perplexity-computer, manus]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run conformance suite (placeholder)
+        run: |
+          echo "Conformance harness will boot a minimal stack and run"
+          echo "adapters/${{ matrix.adapter }}/tests/conformance/run.sh"
+          echo "TODO: implement in Phase 5"

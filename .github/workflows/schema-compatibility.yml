@@ -1,0 +1,20 @@
+name: Schema Compatibility
+
+on:
+  pull_request:
+    paths:
+      - 'protocol/schema/**'
+      - 'protocol/version.txt'
+
+jobs:
+  semver:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - name: Detect breaking changes
+        run: |
+          echo "Compares protocol/schema/* between base and head."
+          echo "Required-field added or type narrowed → MAJOR bump."
+          echo "Optional-field added → MINOR bump."
+          echo "TODO: integrate json-schema-diff in Phase 4."

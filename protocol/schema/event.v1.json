@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gateforge.toniclab.ai/schema/event.v1.json",
+  "title": "AI-AO Event",
+  "description": "Lifecycle event on a task. Version 1.0.",
+  "type": "object",
+  "required": [
+    "event_version",
+    "event_id",
+    "event_type",
+    "task_id",
+    "trace_id",
+    "agent_id",
+    "project",
+    "occurred_at",
+    "data"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "event_version": { "type": "string", "pattern": "^1\\.[0-9]+$" },
+    "event_id": { "type": "string", "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$" },
+    "event_type": {
+      "type": "string",
+      "enum": [
+        "task.assigned",
+        "task.accepted",
+        "task.rejected",
+        "task.progress",
+        "task.completed",
+        "task.failed",
+        "task.cancelled",
+        "task.input_required",
+        "task.input_provided"
+      ]
+    },
+    "task_id": { "type": "string" },
+    "trace_id": { "type": "string" },
+    "agent_id": { "type": "string" },
+    "project": { "type": "string" },
+    "occurred_at": { "type": "string", "format": "date-time" },
+    "data": {
+      "type": "object",
+      "description": "Event-type-specific payload. See PROTOCOL-SPEC.md §4 for required fields per type."
+    },
+    "cost_metadata": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "tokens_input": { "type": "integer", "minimum": 0 },
+        "tokens_output": { "type": "integer", "minimum": 0 },
+        "usd": { "type": "number", "minimum": 0 },
+        "vendor": { "type": "string" },
+        "billing_ref": { "type": "string" }
+      }
+    }
+  }
+}

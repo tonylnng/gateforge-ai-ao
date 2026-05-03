@@ -1,0 +1,152 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gateforge.toniclab.ai/schema/task-envelope.v1.json",
+  "title": "AI-AO Task Envelope",
+  "description": "Unit of delegated work in GateForge AI-AO. Version 1.0.",
+  "type": "object",
+  "required": [
+    "envelope_version",
+    "task_id",
+    "trace_id",
+    "project",
+    "created_at",
+    "created_by",
+    "capability_required",
+    "goal",
+    "success_criteria",
+    "deliverable_type",
+    "constraints",
+    "verification",
+    "callback"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "envelope_version": {
+      "type": "string",
+      "pattern": "^1\\.[0-9]+$",
+      "description": "SemVer major.minor of envelope schema."
+    },
+    "task_id": {
+      "type": "string",
+      "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$",
+      "description": "UUIDv7, Crockford-base32 encoded."
+    },
+    "trace_id": {
+      "type": "string",
+      "minLength": 16,
+      "description": "OpenTelemetry trace identifier."
+    },
+    "parent_task_id": {
+      "type": ["string", "null"],
+      "description": "Parent task if this is a subtask."
+    },
+    "project": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$",
+      "description": "Project repo slug (matches GitHub repo name)."
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "created_by": {
+      "type": "string",
+      "pattern": "^(agent|human):[a-z0-9][a-z0-9-]{1,62}$"
+    },
+    "assigned_to": {
+      "type": ["string", "null"],
+      "pattern": "^agent:[a-z0-9][a-z0-9-]{1,62}$",
+      "description": "Specific agent. May be null for capability-routed tasks."
+    },
+    "capability_required": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{1,62}$"
+    },
+    "goal": {
+      "type": "string",
+      "minLength": 10,
+      "maxLength": 4000
+    },
+    "success_criteria": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 5, "maxLength": 500 }
+    },
+    "deliverable_type": {
+      "type": "string",
+      "enum": [
+        "markdown_report",
+        "code_patch",
+        "structured_doc",
+        "binary_artifact",
+        "decision_record",
+        "analysis",
+        "custom"
+      ]
+    },
+    "deliverable_schema_ref": {
+      "type": ["string", "null"],
+      "description": "JSON Schema URI for structured_doc / custom outputs."
+    },
+    "context_refs": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "type": "string",
+        "pattern": "^(git|s3|https)://"
+      }
+    },
+    "constraints": {
+      "type": "object",
+      "required": ["budget_usd", "deadline", "autonomy_level", "data_classification"],
+      "additionalProperties": false,
+      "properties": {
+        "budget_usd": { "type": "number", "minimum": 0 },
+        "deadline": { "type": "string", "format": "date-time" },
+        "autonomy_level": {
+          "type": "string",
+          "enum": ["autonomous", "supervised", "approval-required"]
+        },
+        "data_classification": {
+          "type": "string",
+          "enum": ["public", "internal", "confidential", "restricted"]
+        },
+        "max_attempts": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10,
+          "default": 1
+        }
+      }
+    },
+    "verification": {
+      "type": "object",
+      "required": ["required"],
+      "additionalProperties": false,
+      "properties": {
+        "required": { "type": "boolean" },
+        "verifier_capability": { "type": "string" },
+        "policy": {
+          "type": "string",
+          "enum": ["block-on-failure", "flag-only", "score-and-record"]
+        }
+      },
+      "if": { "properties": { "required": { "const": true } } },
+      "then": { "required": ["required", "verifier_capability", "policy"] }
+    },
+    "callback": {
+      "type": "object",
+      "required": ["events_subject"],
+      "additionalProperties": false,
+      "properties": {
+        "events_subject": { "type": "string" },
+        "completion_commit_to": { "type": ["string", "null"] }
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Methodology-specific extensions. AI-AO does not interpret.",
+      "additionalProperties": true
+    }
+  }
+}

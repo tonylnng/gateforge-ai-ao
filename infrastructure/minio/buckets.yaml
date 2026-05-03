@@ -1,0 +1,92 @@
+# =============================================================================
+# MinIO Bucket Layout — GateForge AI-AO
+# =============================================================================
+# This file documents the canonical bucket layout.  The actual provisioning is
+# done by infrastructure/minio/bootstrap.sh (run by the minio-bootstrap service
+# on first boot), which uses `mc` to create buckets and apply lifecycle.json.
+#
+# Bucket naming rule:
+#   aiao-<purpose>      (lowercase, hyphenated, no underscores — S3 compliant)
+# =============================================================================
+
+buckets:
+
+  # ---------------------------------------------------------------------
+  # ARTIFACTS — the durable side-channel for large task outputs.
+  # Path convention:
+  #   /<task_id>/<event_seq>/<filename>
+  # Stored alongside event metadata; URL is referenced from event payload.
+  # ---------------------------------------------------------------------
+  - name: aiao-artifacts
+    versioning: enabled
+    object_locking: false
+    quota_gb: 50
+    encryption: SSE-S3
+    notes: |
+      - Promoted artifacts (review-ready) are mirrored into Git via the
+        orchestrator's git-writer worker.
+      - Lifecycle: transition to glacier-tier after 90 days, expire at 365.
+
+  # ---------------------------------------------------------------------
+  # LOGS — raw, structured per-task logs (NDJSON).  Tail in real-time via
+  # the SSE proxy; long-term query via Loki (which scrapes from here).
+  # ---------------------------------------------------------------------
+  - name: aiao-logs
+    versioning: disabled
+    quota_gb: 100
+    encryption: SSE-S3
+    notes: |
+      - Path: /<yyyy>/<mm>/<dd>/<task_id>.ndjson
+      - Lifecycle: expire after 30 days.
+
+  # ---------------------------------------------------------------------
+  # TRACES — long-term storage for OTel traces beyond Tempo's local TSDB.
+  # ---------------------------------------------------------------------
+  - name: aiao-traces
+    versioning: disabled
+    quota_gb: 50
+    encryption: SSE-S3
+    notes: |
+      - Tempo is configured to back-fill from this bucket.
+
+# =============================================================================
+# Service Accounts (created by bootstrap.sh)
+# =============================================================================
+
+service_accounts:
+  - name: orchestrator-rw
+    policy: |
+      {
+        "Version": "2012-10-17",
+        "Statement": [
+          { "Effect": "Allow",
+            "Action": ["s3:*"],
+            "Resource": ["arn:aws:s3:::aiao-artifacts/*",
+                         "arn:aws:s3:::aiao-artifacts",
+                         "arn:aws:s3:::aiao-logs/*",
+                         "arn:aws:s3:::aiao-logs"] }
+        ]
+      }
+
+  - name: adapter-rw
+    policy: |
+      {
+        "Version": "2012-10-17",
+        "Statement": [
+          { "Effect": "Allow",
+            "Action": ["s3:GetObject","s3:PutObject","s3:AbortMultipartUpload"],
+            "Resource": ["arn:aws:s3:::aiao-artifacts/*",
+                         "arn:aws:s3:::aiao-logs/*"] }
+        ]
+      }
+
+  - name: observer-ro
+    policy: |
+      {
+        "Version": "2012-10-17",
+        "Statement": [
+          { "Effect": "Allow",
+            "Action": ["s3:GetObject","s3:ListBucket"],
+            "Resource": ["arn:aws:s3:::aiao-*","arn:aws:s3:::aiao-*/*"] }
+        ]
+      }

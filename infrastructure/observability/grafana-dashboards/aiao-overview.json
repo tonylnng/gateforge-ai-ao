@@ -1,0 +1,51 @@
+{
+  "uid": "aiao-overview",
+  "title": "AI-AO — Overview",
+  "schemaVersion": 39,
+  "version": 1,
+  "tags": ["aiao", "overview"],
+  "timezone": "browser",
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Tasks/min (last 5m)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "sum(rate(aiao_tasks_total[5m]))*60", "refId": "A" }
+      ],
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Failure rate %",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "100 * sum(rate(aiao_tasks_total{outcome=\"fail\"}[5m])) / sum(rate(aiao_tasks_total[5m]))", "refId": "A" }
+      ],
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Task duration p95 by agent",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "histogram_quantile(0.95, sum by (le, agent_id) (rate(aiao_task_duration_ms_bucket[5m])))", "refId": "A" }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 }
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Cost (USD) per hour by agent",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "sum by (agent_id) (rate(aiao_cost_usd_total[1h]))*3600", "refId": "A" }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 }
+    }
+  ]
+}

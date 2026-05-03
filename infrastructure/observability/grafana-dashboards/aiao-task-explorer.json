@@ -1,0 +1,36 @@
+{
+  "uid": "aiao-task-explorer",
+  "title": "AI-AO — Task Explorer",
+  "schemaVersion": 39,
+  "version": 1,
+  "tags": ["aiao", "tasks"],
+  "timezone": "browser",
+  "time": { "from": "now-6h", "to": "now" },
+  "templating": {
+    "list": [
+      { "name": "task_id", "type": "textbox", "label": "Task ID" }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "logs",
+      "title": "Logs for task ${task_id}",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [
+        { "expr": "{job=\"aiao\"} |= \"${task_id}\"", "refId": "A" }
+      ],
+      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 0 }
+    },
+    {
+      "id": 2,
+      "type": "traces",
+      "title": "Trace for task ${task_id}",
+      "datasource": { "type": "tempo", "uid": "tempo" },
+      "targets": [
+        { "queryType": "traceql", "query": "{ resource.task_id=\"${task_id}\" }", "refId": "A" }
+      ],
+      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 12 }
+    }
+  ]
+}

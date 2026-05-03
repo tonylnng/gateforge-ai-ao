@@ -1,0 +1,16 @@
+GateForge AI-AO — Proprietary License
+
+Copyright (c) 2026 Tony Lnng / GateForge Project. All rights reserved.
+
+This software and associated documentation files (the "Software") are
+proprietary to the GateForge Project. Unauthorized copying, modification,
+distribution, or use of this Software, in source or binary form, is
+prohibited without the express written permission of the copyright holder.
+
+The protocol specification (under `protocol/`) and reference adapter
+patterns (under `adapters/_scaffold/`) may be referenced and implemented
+by third parties for the purpose of interoperating with GateForge AI-AO
+deployments, provided that such implementations do not redistribute the
+contents of this repository.
+
+For licensing inquiries, contact the project maintainer.

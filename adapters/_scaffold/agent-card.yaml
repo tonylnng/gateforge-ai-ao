@@ -1,0 +1,44 @@
+# =============================================================================
+# Agent Card — declarative capabilities + limits for an adapter.
+# Validated against /protocol/schema/agent-card.v1.json on registration.
+# =============================================================================
+
+apiVersion: aiao.io/v1
+kind: AgentCard
+metadata:
+  id: example-vendor/v1                # MUST be unique, kebab-case + /vN
+  display_name: "Example Adapter"
+  vendor: example-vendor
+  description: |
+    One-paragraph human description.
+
+spec:
+  protocol_version: "1.0.0-draft"
+
+  capabilities:
+    - name: research
+      description: General-purpose web research and synthesis
+      max_input_tokens: 8000
+      max_output_tokens: 4000
+      cost_estimate_per_call_usd: 0.05
+
+  endpoints:
+    health: http://adapter-example:8201/healthz
+    metrics: http://adapter-example:8201/metrics
+
+  limits:
+    max_concurrency: 4                 # in-flight tasks
+    timeout_seconds: 600
+    rate_limit_per_minute: 30
+
+  auth:
+    nats_user: adapter
+    requires_secrets:
+      - EXAMPLE_API_KEY
+
+  observability:
+    log_level: info
+    redact_keys:
+      - api_key
+      - authorization
+      - cookie

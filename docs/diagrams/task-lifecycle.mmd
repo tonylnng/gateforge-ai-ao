@@ -1,0 +1,20 @@
+stateDiagram-v2
+    [*] --> created: human files issue<br/>or agent spawns subtask
+    created --> assigned: orchestrator picks agent
+    assigned --> accepted: adapter acks (< 1s SLA)
+    assigned --> rejected: adapter cannot accept
+    accepted --> working: invocation starts
+    working --> working: progress events (0..N)
+    working --> verifying: output ready, verification.required = true
+    working --> completed: output ready, no verification
+    verifying --> completed: verifier passes
+    verifying --> failed: verifier fails
+    working --> failed: timeout or error
+    working --> input_required: agent needs input
+    input_required --> working: input received
+    accepted --> cancelled: control message
+    working --> cancelled: control message
+    rejected --> [*]
+    completed --> [*]
+    failed --> [*]
+    cancelled --> [*]

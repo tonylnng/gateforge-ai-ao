@@ -1,0 +1,103 @@
+# =============================================================================
+# JetStream Streams — declarative spec for `nats stream add` provisioning
+# =============================================================================
+# Apply with the helper:
+#   ./scripts/provision-jetstream.sh
+#
+# Or manually for each stream:
+#   nats stream add TASKS --config nats/streams/tasks.json
+#
+# Stream naming rule:  one stream per top-level subject family.
+# Subject taxonomy is defined in protocol/SUBJECTS.md (source of truth).
+# =============================================================================
+
+streams:
+
+  # -----------------------------------------------------------------------
+  # TASKS — task envelopes (assignments, redirects, cancels)
+  # -----------------------------------------------------------------------
+  - name: TASKS
+    subjects:
+      - "aiao.task.>"
+    storage: file
+    retention: workqueue           # consumed-once semantics for assignments
+    max_age: 168h                  # 7 days
+    max_msgs: 1000000
+    max_bytes: 5GB
+    replicas: 1                    # bump to 3 in HA cluster
+    discard: old
+    duplicates: 5m                 # idempotency window via Nats-Msg-Id
+
+  # -----------------------------------------------------------------------
+  # EVENTS — all status events (started, progress, completed, failed, …)
+  # Multi-consumer fan-out: orchestrator + admin portal + observability.
+  # -----------------------------------------------------------------------
+  - name: EVENTS
+    subjects:
+      - "aiao.event.>"
+    storage: file
+    retention: limits              # keep history for replay/audit
+    max_age: 720h                  # 30 days
+    max_msgs: 10000000
+    max_bytes: 20GB
+    replicas: 1
+    discard: old
+
+  # -----------------------------------------------------------------------
+  # CONTROL — break-glass control plane signals (pause, resume, drain)
+  # -----------------------------------------------------------------------
+  - name: CONTROL
+    subjects:
+      - "aiao.control.>"
+    storage: file
+    retention: limits
+    max_age: 168h
+    max_msgs: 100000
+    max_bytes: 1GB
+    replicas: 1
+
+  # -----------------------------------------------------------------------
+  # AUDIT — append-only decision log mirror (signed by orchestrator)
+  # -----------------------------------------------------------------------
+  - name: AUDIT
+    subjects:
+      - "aiao.audit.>"
+    storage: file
+    retention: limits
+    max_age: 8760h                 # 1 year
+    max_msgs: 50000000
+    max_bytes: 50GB
+    replicas: 1
+
+# =============================================================================
+# Consumers (durable) — pre-create so adapters can attach by name
+# =============================================================================
+
+consumers:
+
+  - stream: TASKS
+    name: orchestrator-dispatcher
+    deliver_subject: aiao.deliver.dispatcher
+    ack_policy: explicit
+    ack_wait: 30s
+    max_deliver: 5
+    filter_subject: "aiao.task.assigned.>"
+
+  - stream: EVENTS
+    name: admin-portal-tail
+    deliver_subject: aiao.deliver.admin
+    ack_policy: none               # observability — best-effort
+    deliver_policy: new
+
+  - stream: EVENTS
+    name: cost-aggregator
+    deliver_subject: aiao.deliver.cost
+    ack_policy: explicit
+    ack_wait: 60s
+    filter_subject: "aiao.event.completed.>"
+
+  - stream: AUDIT
+    name: audit-archiver
+    deliver_subject: aiao.deliver.audit
+    ack_policy: explicit
+    ack_wait: 5m

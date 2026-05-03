@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Lint markdown
+        uses: DavidAnson/markdownlint-cli2-action@v17
+        with:
+          globs: |
+            **/*.md
+            !node_modules
+            !**/CHANGELOG.md
+      - name: Lint shell
+        uses: ludeeus/action-shellcheck@2.0.0
+        with:
+          scandir: '.'
+          ignore_paths: 'node_modules'
+        continue-on-error: true
+
+  validate-schema:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - run: npm i -g ajv-cli@5
+      - name: Validate JSON Schemas are well-formed
+        run: |
+          for f in protocol/schema/*.json; do
+            echo "Validating $f"
+            ajv compile -s "$f"
+          done
+
+  validate-compose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: docker compose config
+        working-directory: infrastructure
+        run: |
+          cp .env.example .env
+          docker compose config -q
+          docker compose -f docker-compose.yml -f docker-compose.prod.yml config -q

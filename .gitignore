@@ -1,0 +1,44 @@
+# Environment / secrets
+.env
+.env.local
+*.pem
+*.key
+*.crt
+secrets/
+infrastructure/.env
+install/.env
+
+# Build artifacts
+bin/
+dist/
+build/
+*.exe
+*.test
+*.out
+
+# Go
+vendor/
+*.prof
+
+# Node / TypeScript
+node_modules/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnp.*
+coverage/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Docker volumes (local dev)
+infrastructure/data/
+infrastructure/volumes/
+
+# OS
+Thumbs.db

@@ -1,0 +1,87 @@
+# =============================================================================
+# GateForge AI-AO — Routing & Governance Policy (example)
+# =============================================================================
+# Copy to:  infrastructure/policy/policy.yaml
+# The orchestrator hot-reloads this file on SIGHUP or every 30 seconds.
+#
+# Three knobs:
+#   1. routing      — which agent handles which capability
+#   2. budgets      — hard ceilings, fail-closed
+#   3. break-glass  — pause/drain switches (default closed = denied)
+# =============================================================================
+
+version: 1
+default_deny: true
+
+# -----------------------------------------------------------------------------
+# 1. Routing rules — first match wins.
+# Capabilities are methodology-neutral verbs (research, system-design, …).
+# Roles like "architect" or "developer" are NOT used here.
+# -----------------------------------------------------------------------------
+routing:
+
+  - capability: research
+    agents:
+      - id: perplexity-computer/v1
+        weight: 70
+      - id: openclaw/v1
+        weight: 30
+    fallback: openclaw/v1
+    timeout_seconds: 600
+    max_retries: 2
+
+  - capability: system-design
+    agents:
+      - id: openclaw/v1
+        weight: 100
+    timeout_seconds: 1800
+    max_retries: 1
+
+  - capability: code-review
+    agents:
+      - id: openclaw/v1
+        weight: 60
+      - id: manus/v1
+        weight: 40
+    timeout_seconds: 900
+
+  - capability: artifact-generation
+    agents:
+      - id: perplexity-computer/v1
+        weight: 100
+    timeout_seconds: 1200
+
+  # Catch-all for unknown capabilities — denied by default_deny.
+  - capability: "*"
+    agents: []
+
+# -----------------------------------------------------------------------------
+# 2. Budgets — fail-closed once hit.  Reset by aggregator on date roll-over.
+# -----------------------------------------------------------------------------
+budgets:
+  global:
+    daily_usd: 50
+    monthly_usd: 500
+  per_agent:
+    perplexity-computer/v1:
+      daily_usd: 25
+    manus/v1:
+      daily_usd: 10
+
+# -----------------------------------------------------------------------------
+# 3. Break-glass switches — operators flip via Admin Portal control action.
+# -----------------------------------------------------------------------------
+controls:
+  global_pause: false        # if true, all dispatch halts; existing tasks finish
+  drain_mode:   false        # accept no new tasks; finish in-flight
+  agent_pause:               # specific agents paused
+    - manus/v1               # example: paused while session refresh in progress
+
+# -----------------------------------------------------------------------------
+# 4. Circuit-breaker tuning (per agent+capability)
+# -----------------------------------------------------------------------------
+breakers:
+  default:
+    failure_threshold: 5     # consecutive failures
+    open_seconds: 60         # cool-off
+    half_open_probes: 1

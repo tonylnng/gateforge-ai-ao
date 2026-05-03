@@ -1,0 +1,66 @@
+# =============================================================================
+# OpenTelemetry Collector — receives OTLP from orchestrator + adapters,
+# fans out to Tempo (traces), Loki (logs), and Prometheus-compatible metrics.
+# =============================================================================
+
+receivers:
+  otlp:
+    protocols:
+      grpc: { endpoint: 0.0.0.0:4317 }
+      http: { endpoint: 0.0.0.0:4318 }
+
+processors:
+  batch:
+    timeout: 5s
+    send_batch_size: 512
+
+  memory_limiter:
+    check_interval: 5s
+    limit_percentage: 80
+    spike_limit_percentage: 25
+
+  # Attach deployment metadata to every signal.
+  resource:
+    attributes:
+      - key: deployment.environment
+        value: ${env:DEPLOY_ENV}
+        action: upsert
+      - key: service.namespace
+        value: gateforge-aiao
+        action: upsert
+
+exporters:
+  otlp/tempo:
+    endpoint: tempo:4317
+    tls: { insecure: true }
+
+  loki:
+    endpoint: http://loki:3100/loki/api/v1/push
+    default_labels_enabled:
+      exporter: false
+      job: true
+
+  prometheus:
+    endpoint: 0.0.0.0:8889
+
+  debug:
+    verbosity: basic
+
+extensions:
+  health_check: { endpoint: 0.0.0.0:13133 }
+
+service:
+  extensions: [health_check]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, batch]
+      exporters: [otlp/tempo]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, batch]
+      exporters: [loki]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, resource, batch]
+      exporters: [prometheus]

@@ -1,0 +1,12 @@
+# Drop-in service block — copy under `services:` in infrastructure/docker-compose.yml
+adapter-example:
+  image: ghcr.io/<org>/aiao-adapter-example:0.1.0
+  container_name: aiao-adapter-example
+  restart: unless-stopped
+  env_file: [.env]
+  ports:
+    - "8201:8201"
+  networks: [aiao]
+  depends_on:
+    nats:         { condition: service_healthy }
+    orchestrator: { condition: service_healthy }

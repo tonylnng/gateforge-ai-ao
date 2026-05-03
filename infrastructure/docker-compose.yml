@@ -1,0 +1,275 @@
+# =============================================================================
+# GateForge AI-AO — Single-VM All-in-One Stack (dev / small-team)
+# =============================================================================
+# Boot order is enforced via `depends_on.condition: service_healthy`.
+#
+# Quick start:
+#   cp .env.example .env
+#   ./scripts/generate-secrets.sh
+#   docker compose up -d
+#   docker compose ps          # all should show "healthy"
+#   docker compose logs -f orchestrator
+#
+# Layered files:
+#   docker-compose.yml          (this file — base, dev-friendly defaults)
+#   docker-compose.prod.yml     (overrides for prod: TLS, resource limits, restart=always)
+#
+# Use:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+# =============================================================================
+
+name: gateforge-aiao
+
+networks:
+  aiao:
+    driver: bridge
+  observability:
+    driver: bridge
+
+volumes:
+  nats_data:
+  minio_data:
+  postgres_data:
+  tempo_data:
+  loki_data:
+  grafana_data:
+  orch_state:
+
+# =============================================================================
+# CORE SUBSTRATES
+# =============================================================================
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # NATS JetStream — real-time event bus (B-substrate)
+  # ---------------------------------------------------------------------------
+  nats:
+    image: nats:2.10.20-alpine
+    container_name: aiao-nats
+    restart: unless-stopped
+    command:
+      - "-c"
+      - "/etc/nats/nats-server.conf"
+    ports:
+      - "${NATS_CLIENT_PORT:-4222}:4222"
+      - "${NATS_HTTP_PORT:-8222}:8222"
+    volumes:
+      - ./nats/nats-server.conf:/etc/nats/nats-server.conf:ro
+      - nats_data:/data/jetstream
+    networks: [aiao]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8222/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  # ---------------------------------------------------------------------------
+  # MinIO — artifact + log object store (C-substrate)
+  # ---------------------------------------------------------------------------
+  minio:
+    image: minio/minio:RELEASE.2025-01-20T14-49-07Z
+    container_name: aiao-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_REGION: ${MINIO_REGION:-ap-east-1}
+    ports:
+      - "${MINIO_API_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - minio_data:/data
+    networks: [aiao]
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # One-shot: provisions buckets, lifecycle, and service account on first boot.
+  minio-bootstrap:
+    image: minio/mc:RELEASE.2025-01-17T23-25-50Z
+    container_name: aiao-minio-bootstrap
+    depends_on:
+      minio: { condition: service_healthy }
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_BUCKET_ARTIFACTS: ${MINIO_BUCKET_ARTIFACTS}
+      MINIO_BUCKET_LOGS: ${MINIO_BUCKET_LOGS}
+      MINIO_BUCKET_TRACES: ${MINIO_BUCKET_TRACES}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+    volumes:
+      - ./minio/bootstrap.sh:/bootstrap.sh:ro
+      - ./minio/lifecycle.json:/etc/lifecycle.json:ro
+    entrypoint: ["/bin/sh", "/bootstrap.sh"]
+    networks: [aiao]
+    restart: "no"
+
+  # ---------------------------------------------------------------------------
+  # Postgres — aggregates (cost, audit, breaker state). NOT system of record.
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:16.6-alpine
+    container_name: aiao-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      PGDATA: /var/lib/postgresql/data/pgdata
+      TZ: ${TZ:-UTC}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    networks: [aiao]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+# =============================================================================
+# OBSERVABILITY (optional but recommended)
+# =============================================================================
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.115.0
+    container_name: aiao-otel
+    restart: unless-stopped
+    command: ["--config", "/etc/otel/collector.yaml"]
+    volumes:
+      - ./observability/otel-collector.yaml:/etc/otel/collector.yaml:ro
+    ports:
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+    networks: [aiao, observability]
+    depends_on:
+      tempo: { condition: service_started }
+      loki:  { condition: service_started }
+
+  tempo:
+    image: grafana/tempo:2.6.1
+    container_name: aiao-tempo
+    restart: unless-stopped
+    command: ["-config.file=/etc/tempo/tempo.yaml"]
+    volumes:
+      - ./observability/tempo.yaml:/etc/tempo/tempo.yaml:ro
+      - tempo_data:/var/tempo
+    networks: [observability]
+
+  loki:
+    image: grafana/loki:3.3.2
+    container_name: aiao-loki
+    restart: unless-stopped
+    command: ["-config.file=/etc/loki/loki.yaml"]
+    volumes:
+      - ./observability/loki.yaml:/etc/loki/loki.yaml:ro
+      - loki_data:/loki
+    networks: [observability]
+
+  grafana:
+    image: grafana/grafana:11.4.0
+    container_name: aiao-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_FEATURE_TOGGLES_ENABLE: "traceqlEditor"
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./observability/grafana-provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana-dashboards:/var/lib/grafana/dashboards:ro
+    networks: [aiao, observability]
+    depends_on:
+      tempo: { condition: service_started }
+      loki:  { condition: service_started }
+
+# =============================================================================
+# CONTROL PLANE
+# =============================================================================
+
+  orchestrator:
+    image: ghcr.io/tonylnng/gateforge-aiao-orchestrator:0.1.0
+    # build:
+    #   context: ../orchestrator
+    #   dockerfile: Dockerfile
+    container_name: aiao-orchestrator
+    restart: unless-stopped
+    env_file: [.env]
+    ports:
+      - "${ORCH_HTTP_PORT:-8080}:8080"
+      - "${ORCH_METRICS_PORT:-9100}:9100"
+    volumes:
+      - orch_state:/var/lib/aiao
+      - ./policy/policy.yaml:/config/policy.yaml:ro
+    networks: [aiao]
+    depends_on:
+      nats:     { condition: service_healthy }
+      postgres: { condition: service_healthy }
+      minio:    { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/healthz"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 15s
+
+# =============================================================================
+# ADAPTERS (enable per-deployment)
+# =============================================================================
+
+  adapter-perplexity-computer:
+    image: ghcr.io/tonylnng/gateforge-aiao-adapter-pplx:0.1.0
+    container_name: aiao-adapter-pplx
+    restart: unless-stopped
+    profiles: ["pplx"]
+    env_file: [.env]
+    ports:
+      - "${ADAPTER_PPLX_HTTP_PORT:-8201}:8201"
+    networks: [aiao]
+    depends_on:
+      nats:         { condition: service_healthy }
+      orchestrator: { condition: service_healthy }
+
+  adapter-manus:
+    image: ghcr.io/tonylnng/gateforge-aiao-adapter-manus:0.1.0
+    container_name: aiao-adapter-manus
+    restart: unless-stopped
+    profiles: ["manus"]
+    env_file: [.env]
+    ports:
+      - "${ADAPTER_MANUS_HTTP_PORT:-8202}:8202"
+    volumes:
+      - ./secrets/manus-session.json:/secrets/manus-session.json:ro
+    networks: [aiao]
+    depends_on:
+      nats:         { condition: service_healthy }
+      orchestrator: { condition: service_healthy }
+
+  adapter-openclaw:
+    image: ghcr.io/tonylnng/gateforge-aiao-adapter-openclaw:0.1.0
+    container_name: aiao-adapter-openclaw
+    restart: unless-stopped
+    profiles: ["openclaw"]
+    env_file: [.env]
+    ports:
+      - "${ADAPTER_OPENCLAW_HTTP_PORT:-8203}:8203"
+    networks: [aiao]
+    depends_on:
+      nats:         { condition: service_healthy }
+      orchestrator: { condition: service_healthy }

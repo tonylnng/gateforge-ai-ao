@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gateforge.toniclab.ai/schema/agent-card.v1.json",
+  "title": "AI-AO Agent Card",
+  "type": "object",
+  "required": [
+    "card_version",
+    "agent_id",
+    "type",
+    "adapter",
+    "capabilities",
+    "endpoint",
+    "constraints",
+    "heartbeat"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "card_version": { "type": "string", "pattern": "^1\\.[0-9]+$" },
+    "agent_id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{1,62}$" },
+    "type": {
+      "type": "string",
+      "enum": ["native", "external-saas", "custom"]
+    },
+    "adapter": {
+      "type": "object",
+      "required": ["name", "version", "protocol_versions"],
+      "properties": {
+        "name": { "type": "string" },
+        "version": { "type": "string" },
+        "protocol_versions": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+$" }
+        }
+      }
+    },
+    "capabilities": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["name"],
+        "properties": {
+          "name": { "type": "string", "pattern": "^[a-z][a-z0-9-]{1,62}$" },
+          "proficiency": {
+            "type": "string",
+            "enum": ["low", "medium", "high"]
+          }
+        }
+      }
+    },
+    "cost_profile": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "rate_limits": {
+      "type": "object",
+      "properties": {
+        "per_minute": { "type": "integer", "minimum": 0 },
+        "per_hour": { "type": "integer", "minimum": 0 },
+        "per_day": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "reliability": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "endpoint": {
+      "type": "object",
+      "required": ["inbound_subject", "outbound_subject"],
+      "properties": {
+        "inbound_subject": { "type": "string" },
+        "outbound_subject": { "type": "string" }
+      }
+    },
+    "constraints": {
+      "type": "object",
+      "required": ["max_concurrent", "default_autonomy_level", "data_classifications_accepted"],
+      "properties": {
+        "max_concurrent": { "type": "integer", "minimum": 1 },
+        "default_autonomy_level": {
+          "type": "string",
+          "enum": ["autonomous", "supervised", "approval-required"]
+        },
+        "data_classifications_accepted": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["public", "internal", "confidential", "restricted"]
+          }
+        }
+      }
+    },
+    "heartbeat": {
+      "type": "object",
+      "required": ["interval_seconds"],
+      "properties": {
+        "interval_seconds": { "type": "integer", "minimum": 5 },
+        "last_heartbeat": { "type": "string", "format": "date-time" },
+        "current_load": { "type": "integer", "minimum": 0 },
+        "queue_depth": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "methodology_hints": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  }
+}
