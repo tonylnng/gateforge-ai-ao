@@ -28,29 +28,22 @@ Lower layers are stable. Higher layers iterate freely. The protocol (Layer 3) is
 flowchart TD
     GH["GitHub.com\n(per-project repo)"]
 
-    subgraph CP["AI-AO Control Plane"]
-        subgraph ORCH_BOX["Orchestrator (Go service)"]
-            ORCH_DESC["· receives webhooks\n· reads agent registry (NATS KV)\n· routes tasks by capability\n· subscribes to lifecycle events\n· mirrors significant events to Git\n· enforces policy (budget/autonomy/circuit breakers)"]
-        end
-
-        NATS["NATS JetStream"]
-        NATSKVBOX["NATS KV\n(registry)"]
+    subgraph CP["AI-AO Control Plane (your VM)"]
+        ORCH["Orchestrator (Go service)\n· receives webhooks\n· reads agent registry NATS KV\n· routes tasks by capability\n· subscribes to lifecycle events\n· mirrors significant events to Git\n· enforces policy / budget / circuit breakers"]
+        NATS["NATS JetStream\nsubjects: project.*.task.*  agent.*  registry.*  audit.*"]
+        NATSKVBOX["NATS KV (registry)"]
         POLICY["Policy Engine"]
         VERIFIER["Verifier Engine"]
+        AD_OC["OpenClaw adapter"]
+        AD_PC["Perplexity Computer adapter"]
+        AD_MN["Manus adapter"]
+        AD_CG["ChatGPT Agent adapter"]
+        AD_CU["Custom adapter"]
 
-        ORCH_BOX -->|pub/sub| NATS
-        ORCH_BOX -->|KV| NATSKVBOX
-        ORCH_BOX -->|http| POLICY
-        ORCH_BOX -->|http| VERIFIER
-
-        subgraph ADAPTERS["Adapters (subjects: project.*.task.*  agent.*  registry.*  audit.*)"]
-            AD_OC["OpenClaw\nadapter"]
-            AD_PC["Perplexity Computer\nadapter"]
-            AD_MN["Manus\nadapter"]
-            AD_CG["ChatGPT Agent\nadapter"]
-            AD_CU["Custom\nadapter"]
-        end
-
+        ORCH -->|pub/sub| NATS
+        ORCH -->|KV| NATSKVBOX
+        ORCH -->|http| POLICY
+        ORCH -->|http| VERIFIER
         NATS --> AD_OC
         NATS --> AD_PC
         NATS --> AD_MN
@@ -59,19 +52,27 @@ flowchart TD
     end
 
     subgraph STORAGE["Storage layer"]
-        MINIO["MinIO\n(S3 API)"]
-        PG["Postgres\n(cost, audit)"]
-        OTEL["OTel + Tempo\n+ Loki + Grafana"]
+        MINIO["MinIO (S3 API)"]
+        PG["Postgres (cost, audit)"]
+        OTEL["OTel + Tempo + Loki + Grafana"]
     end
 
-    GH -->|webhooks| CP
-    CP -->|commits| GH
-    AD_OC -->|NATS (native)| OC_VM["OpenClaw VMs"]
-    AD_PC -->|HTTPS API| PC_SAAS["Perplexity Computer\n(SaaS)"]
-    AD_MN -->|Browser automation| MN_SAAS["Manus (SaaS)"]
-    AD_CG -->|Browser automation| CG_SAAS["ChatGPT Agent\n(SaaS)"]
-    AD_CU --> CU_SAAS["Custom agent"]
+    subgraph PLATFORMS["Agent Platforms"]
+        OC_VM["OpenClaw VMs"]
+        PC_SAAS["Perplexity Computer (SaaS)"]
+        MN_SAAS["Manus (SaaS)"]
+        CG_SAAS["ChatGPT Agent (SaaS)"]
+        CU_SAAS["Custom agent"]
+    end
+
+    GH -->|webhooks| ORCH
+    ORCH -->|commits| GH
     CP --> STORAGE
+    AD_OC -->|"NATS (native)"| OC_VM
+    AD_PC -->|HTTPS API| PC_SAAS
+    AD_MN -->|Browser automation| MN_SAAS
+    AD_CG -->|Browser automation| CG_SAAS
+    AD_CU --> CU_SAAS
 ```
 
 All adapter services and storage components run on **your VM** (single-VM dev) or across a small fleet (production). See [`install/`](../install/) for sizing.
