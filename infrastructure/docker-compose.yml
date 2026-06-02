@@ -34,6 +34,7 @@ volumes:
   loki_data:
   grafana_data:
   orch_state:
+  n8n_data:
 
 # =============================================================================
 # CORE SUBSTRATES
@@ -273,3 +274,58 @@ services:
     depends_on:
       nats:         { condition: service_healthy }
       orchestrator: { condition: service_healthy }
+
+  # ---------------------------------------------------------------------------
+  # n8n + Claude Opus 4.7 via Vercel AI Gateway (API-based)
+  # Reaches Claude Opus 4.7 through Vercel AI Gateway (OpenAI-compatible API).
+  # Bypasses Anthropic direct API geo-restrictions (e.g. Hong Kong).
+  # n8n is the agent runtime — OpenAI Chat Model node → ai-gateway.vercel.sh
+  # ---------------------------------------------------------------------------
+  adapter-n8n-claude-opus:
+    image: ghcr.io/tonylnng/gateforge-aiao-adapter-n8n-claude-opus:0.1.0
+    container_name: aiao-adapter-n8n-claude-opus
+    restart: unless-stopped
+    profiles: ["n8n-claude-opus"]
+    env_file: [.env]
+    ports:
+      - "${ADAPTER_N8N_HTTP_PORT:-8204}:8204"
+    networks: [aiao]
+    depends_on:
+      nats:         { condition: service_healthy }
+      orchestrator: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8204/healthz"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 15s
+
+  # n8n self-hosted (optional — omit if using a separately deployed n8n)
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: aiao-n8n
+    restart: unless-stopped
+    profiles: ["n8n"]
+    environment:
+      - N8N_HOST=${N8N_HOST:-n8n}
+      - N8N_PORT=${N8N_PORT:-5678}
+      - N8N_PROTOCOL=${N8N_PROTOCOL:-http}
+      - N8N_EDITOR_BASE_URL=${N8N_EDITOR_BASE_URL:-http://localhost:5678}
+      - WEBHOOK_URL=${N8N_WEBHOOK_URL:-http://n8n:5678}
+      - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
+      - N8N_USER_MANAGEMENT_JWT_SECRET=${N8N_JWT_SECRET}
+      - GENERIC_TIMEZONE=${TZ:-Asia/Hong_Kong}
+      - TZ=${TZ:-Asia/Hong_Kong}
+      - N8N_METRICS=true
+      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4318}
+    ports:
+      - "${N8N_PORT:-5678}:5678"
+    volumes:
+      - n8n_data:/home/node/.n8n
+    networks: [aiao]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:5678/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s

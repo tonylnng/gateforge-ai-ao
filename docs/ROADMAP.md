@@ -71,7 +71,9 @@ Phase-based build plan. Each phase is bounded by a deliverable, not by time. Wit
 
 ---
 
-## Phase 5 — First closed-platform adapter (Perplexity Computer)
+## Phase 5 — First closed-platform adapters
+
+### 5a — Perplexity Computer
 
 - [ ] API-based adapter under `adapters/perplexity-computer/`
 - [ ] Rate limiting and per-platform concurrency caps
@@ -79,6 +81,24 @@ Phase-based build plan. Each phase is bounded by a deliverable, not by time. Wit
 - [ ] Cost tracking emitted with every event
 
 **Deliverable:** Perplexity Computer is reachable as a peer through AI-AO.
+
+### 5b — n8n + Claude Opus 4.7 via Vercel AI Gateway *(added 2026-06-02)*
+
+> **Context:** Anthropic's direct API is geo-restricted from Hong Kong. This adapter routes Claude Opus 4.7 through Vercel AI Gateway (globally reachable, OpenAI-compatible) using n8n's AI Agent (Tools Agent) as the runtime.
+
+- [ ] Adapter scaffold under `adapters/n8n-claude-opus/`
+- [ ] n8n AI Agent workflow: OpenAI Chat Model node → `ai-gateway.vercel.sh` → `anthropic/claude-opus-4.7`
+- [ ] Webhook trigger/callback contract between adapter and n8n
+- [ ] n8n self-hosted service added to `infrastructure/docker-compose.yml` (optional profile `n8n`)
+- [ ] Cost extraction from n8n completion callback → NATS event → Postgres rollup
+- [ ] Fast mode support (`CLAUDE_CODE_ENABLE_OPUS_4_7_FAST_MODE`)
+- [ ] Data classification guard: reject `confidential`/`restricted` tasks (data transits Vercel cloud)
+- [ ] Conformance suite passing
+- [ ] ADR-0004 documenting the geo-restriction workaround
+
+**Deliverable:** Claude Opus 4.7 is reachable as a reasoning-capable peer from HK-based VMs through Vercel AI Gateway. `reasoning` capability routed here by default in `policy.example.yaml`.
+
+**See:** [`adapters/n8n-claude-opus/README.md`](../adapters/n8n-claude-opus/README.md) · [`docs/adr/0004-n8n-vercel-gateway-adapter.md`](adr/0004-n8n-vercel-gateway-adapter.md)
 
 ---
 

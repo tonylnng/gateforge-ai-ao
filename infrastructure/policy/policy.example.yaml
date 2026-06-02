@@ -23,32 +23,57 @@ routing:
   - capability: research
     agents:
       - id: perplexity-computer/v1
-        weight: 70
-      - id: openclaw/v1
+        weight: 50
+      - id: n8n-claude-opus/v1
         weight: 30
+      - id: openclaw/v1
+        weight: 20
     fallback: openclaw/v1
     timeout_seconds: 600
     max_retries: 2
 
+  - capability: reasoning
+    # Deep reasoning, planning, task decomposition — routed to Claude Opus 4.7
+    agents:
+      - id: n8n-claude-opus/v1
+        weight: 100
+    fallback: openclaw/v1
+    timeout_seconds: 1800
+    max_retries: 1
+
   - capability: system-design
     agents:
+      - id: n8n-claude-opus/v1
+        weight: 60
       - id: openclaw/v1
-        weight: 100
+        weight: 40
     timeout_seconds: 1800
     max_retries: 1
 
   - capability: code-review
     agents:
+      - id: n8n-claude-opus/v1
+        weight: 50
       - id: openclaw/v1
-        weight: 60
+        weight: 30
       - id: manus/v1
-        weight: 40
+        weight: 20
     timeout_seconds: 900
 
   - capability: artifact-generation
     agents:
       - id: perplexity-computer/v1
-        weight: 100
+        weight: 70
+      - id: n8n-claude-opus/v1
+        weight: 30
+    timeout_seconds: 1200
+
+  - capability: document-generation
+    agents:
+      - id: n8n-claude-opus/v1
+        weight: 60
+      - id: perplexity-computer/v1
+        weight: 40
     timeout_seconds: 1200
 
   # Catch-all for unknown capabilities — denied by default_deny.
@@ -65,6 +90,8 @@ budgets:
   per_agent:
     perplexity-computer/v1:
       daily_usd: 25
+    n8n-claude-opus/v1:
+      daily_usd: 20
     manus/v1:
       daily_usd: 10
 

@@ -1,0 +1,143 @@
+# =============================================================================
+# Agent Card — n8n + Claude Opus 4.7 via Vercel AI Gateway
+# Validated against /protocol/schema/agent-card.v1.json on registration.
+#
+# Runtime: n8n AI Agent (Tools Agent) with OpenAI Chat Model node
+# Gateway: Vercel AI Gateway (ai-gateway.vercel.sh) — globally reachable,
+#          bypasses Anthropic direct API geo-restrictions (e.g. Hong Kong)
+# Model:   anthropic/claude-opus-4.7
+# =============================================================================
+
+apiVersion: aiao.io/v1
+kind: AgentCard
+metadata:
+  id: n8n-claude-opus/v1
+  display_name: "n8n + Claude Opus 4.7 (Vercel AI Gateway)"
+  vendor: anthropic-via-vercel
+  description: |
+    AI agent powered by Claude Opus 4.7, accessed via Vercel AI Gateway's
+    OpenAI-compatible endpoint. The agent runtime is an n8n AI Agent workflow
+    (Tools Agent), making n8n's full tool ecosystem (400+ integrations) available
+    to the model. Optimised for long-running, asynchronous, multi-step tasks
+    requiring deep reasoning. Globally reachable — does not call api.anthropic.com
+    directly, which resolves geo-restriction issues in HK and other restricted
+    regions.
+
+spec:
+  protocol_version: "1.0.0-draft"
+
+  capabilities:
+    - name: reasoning
+      description: Complex multi-step reasoning, planning, and task decomposition
+      max_input_tokens: 200000
+      max_output_tokens: 32000
+      cost_estimate_per_call_usd: 0.08
+      proficiency: high
+
+    - name: research
+      description: Deep research with synthesis, citation, and structured output
+      max_input_tokens: 200000
+      max_output_tokens: 32000
+      cost_estimate_per_call_usd: 0.06
+      proficiency: high
+
+    - name: document-generation
+      description: Markdown reports, ADRs, runbooks, structured documents
+      max_input_tokens: 100000
+      max_output_tokens: 32000
+      cost_estimate_per_call_usd: 0.05
+      proficiency: high
+
+    - name: code-review
+      description: Code analysis, quality, security, and correctness review
+      max_input_tokens: 150000
+      max_output_tokens: 16000
+      cost_estimate_per_call_usd: 0.07
+      proficiency: high
+
+    - name: system-design
+      description: Architecture analysis, trade-off evaluation, design recommendations
+      max_input_tokens: 150000
+      max_output_tokens: 32000
+      cost_estimate_per_call_usd: 0.10
+      proficiency: high
+
+  endpoints:
+    health: http://adapter-n8n-claude-opus:8204/healthz
+    metrics: http://adapter-n8n-claude-opus:8204/metrics
+    # n8n workflow webhook (internal — adapter calls this directly)
+    n8n_webhook: "${ADAPTER_N8N_WORKFLOW_URL}"
+
+  gateway:
+    provider: vercel-ai-gateway
+    base_url: https://ai-gateway.vercel.sh/v1
+    model: anthropic/claude-opus-4.7
+    # Uses OpenAI-compatible API format (n8n OpenAI Chat Model node)
+    api_format: openai-compatible
+    # Responses API must be DISABLED — Vercel gateway does not support it
+    # for non-OpenAI models. Toggle off in n8n OpenAI Chat Model node.
+    responses_api_enabled: false
+
+  limits:
+    max_concurrency: 3
+    timeout_seconds: 1800          # 30 min; Opus 4.7 handles long-running tasks
+    rate_limit_per_minute: 10
+    rate_limit_per_hour: 60
+    rate_limit_per_day: 200
+
+  auth:
+    nats_user: adapter
+    requires_secrets:
+      - ADAPTER_N8N_WORKFLOW_URL        # n8n webhook trigger URL
+      - ADAPTER_N8N_API_KEY             # n8n REST API key (exec polling)
+      - ADAPTER_N8N_VERCEL_GATEWAY_KEY  # Vercel AI Gateway API key
+
+  observability:
+    log_level: info
+    redact_keys:
+      - api_key
+      - authorization
+      - ADAPTER_N8N_API_KEY
+      - ADAPTER_N8N_VERCEL_GATEWAY_KEY
+      - x-ai-gateway-api-key
+
+  reliability:
+    success_rate_30d: null          # populated by orchestrator from live data
+    p50_latency_seconds: 45
+    p95_latency_seconds: 300
+    # Opus 4.7 fast mode: up to 2.5× faster, higher per-token cost
+    fast_mode_available: true
+    fast_mode_env:
+      CLAUDE_CODE_ENABLE_OPUS_4_7_FAST_MODE: "1"
+      CLAUDE_CODE_SKIP_FAST_MODE_ORG_CHECK: "1"
+
+  cost_profile:
+    per_task_estimate_usd: 0.07
+    per_token_input_usd: 0.000015    # Opus 4.7 standard rate
+    per_token_output_usd: 0.000075
+    fast_mode_per_token_input_usd: 0.000030   # $30/M input in fast mode
+    fast_mode_per_token_output_usd: 0.000150  # $150/M output in fast mode
+    gateway: vercel-ai-gateway
+
+  constraints:
+    default_autonomy_level: supervised
+    data_classifications_accepted:
+      - public
+      - internal
+    # Do not route confidential/restricted data through Vercel's cloud gateway
+    data_classifications_rejected:
+      - confidential
+      - restricted
+
+  heartbeat:
+    interval_seconds: 10
+    current_load: 0
+    queue_depth: 0
+
+  methodology_hints:
+    gateforge_guideline:
+      role_fit:
+        - architect        # system-design capability
+        - pm               # reasoning + document-generation
+        - qc               # code-review + reasoning
+        - researcher       # research capability

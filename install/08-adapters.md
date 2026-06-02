@@ -36,7 +36,8 @@ All three present the same shape to the bus. Asymmetry is hidden inside.
 |--------|------|--------|
 | `adapters/_scaffold/` | Template + echo adapter | Phase 0: scaffold ready |
 | `adapters/openclaw/` | Native | Phase 4 |
-| `adapters/perplexity-computer/` | API-based | Phase 5 |
+| `adapters/perplexity-computer/` | API-based | Phase 5a |
+| `adapters/n8n-claude-opus/` | API-based | Phase 5b — Claude Opus 4.7 via Vercel AI Gateway |
 | `adapters/manus/` | Browser-based | Phase 7 |
 
 ---
@@ -181,6 +182,49 @@ A more thorough check is the smoke test: `tools/smoke-test.sh`.
 
 ---
 
+## n8n + Claude Opus 4.7 adapter specifics
+
+This adapter (`adapters/n8n-claude-opus/`) is the preferred Brains component for reasoning-heavy tasks.
+It uses n8n's AI Agent (Tools Agent) with the **OpenAI Chat Model node** pointed at Vercel AI Gateway.
+
+### Why OpenAI node, not Anthropic node
+
+The n8n Anthropic node hardcodes `api.anthropic.com` and does not support a custom base URL.
+The OpenAI node accepts a configurable **Base URL**, making it the correct vehicle for any OpenAI-compatible gateway.
+
+### n8n credential setup
+
+In n8n → Settings → Credentials → Add Credential → **OpenAI**:
+
+| Field | Value |
+|-------|-------|
+| API Key | `<your Vercel AI Gateway key>` |
+| Base URL | `https://ai-gateway.vercel.sh/v1` |
+| Organization ID | *(leave blank)* |
+
+In the AI Agent node, attach **OpenAI Chat Model** with:
+- Model: `anthropic/claude-opus-4.7`
+- **Disable the Responses API toggle** (Vercel gateway does not support it for Anthropic models)
+
+### Data classification constraint
+
+Traffic transits Vercel's cloud. Only route `public` and `internal` tasks to this adapter.
+`confidential` and `restricted` tasks must be directed to `openclaw/v1` (on-premise) instead.
+This is enforced in `policy.yaml` via `data_classifications_rejected`.
+
+### Fast mode
+
+Opus 4.7 fast mode (up to 2.5× faster, higher cost) is opt-in:
+
+```bash
+export CLAUDE_CODE_ENABLE_OPUS_4_7_FAST_MODE=1
+export CLAUDE_CODE_SKIP_FAST_MODE_ORG_CHECK=1
+```
+
+Or set in `infrastructure/.env` before starting the adapter container.
+
+---
+
 ## Common issues
 
 | Symptom | Cause | Fix |
@@ -189,3 +233,6 @@ A more thorough check is the smoke test: `tools/smoke-test.sh`.
 | `task.assigned` not received | Subject filter wrong, or wrong consumer group | Check adapter logs for subscribe errors |
 | Browser adapter timing out | Session expired | Re-authenticate; check `runbooks/browser-session-refresh.md` |
 | Adapter holding > MAX_CONCURRENT | Concurrency cap not enforced | Check adapter source — semaphore around invoke |
+| n8n-claude-opus: 401 from Vercel gateway | Invalid or expired Vercel AI Gateway key | Rotate `ADAPTER_N8N_VERCEL_GATEWAY_KEY` |
+| n8n-claude-opus: model not found | Wrong model identifier | Confirm `anthropic/claude-opus-4.7` is available on your Vercel AI Gateway plan |
+| n8n-claude-opus: Responses API error | Responses API toggle not disabled in n8n | In n8n OpenAI Chat Model node, toggle off "Responses API" |
