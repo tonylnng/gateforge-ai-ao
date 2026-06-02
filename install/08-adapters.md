@@ -187,10 +187,45 @@ A more thorough check is the smoke test: `tools/smoke-test.sh`.
 This adapter (`adapters/n8n-claude-opus/`) is the preferred Brains component for reasoning-heavy tasks.
 It uses n8n's AI Agent (Tools Agent) with the **OpenAI Chat Model node** pointed at Vercel AI Gateway.
 
+### One n8n instance is enough
+
+`adapter-n8n-claude-opus` and the `n8n` Docker service are **two separate things**:
+
+| Component | What it is | Do you need it? |
+|-----------|-----------|----------------|
+| `n8n` | The n8n application — workflow engine, UI, database | Only if you don't already run n8n |
+| `adapter-n8n-claude-opus` | Small TS service — NATS ↔ n8n HTTP bridge | Always required |
+
+If you already have n8n running (on the same VM or elsewhere), point the adapter at it:
+
+```bash
+# .env
+ADAPTER_N8N_WORKFLOW_URL=http://<your-n8n-host>:5678/webhook/<your-webhook-id>
+```
+
+Then start only the adapter:
+
+```bash
+docker compose --profile n8n-claude-opus up -d   # no --profile n8n needed
+```
+
+You do **not** need two n8n instances. The adapter just calls into whichever n8n you point it at.
+
 ### Why OpenAI node, not Anthropic node
 
 The n8n Anthropic node hardcodes `api.anthropic.com` and does not support a custom base URL.
 The OpenAI node accepts a configurable **Base URL**, making it the correct vehicle for any OpenAI-compatible gateway.
+
+> ### ⚠️ Critical: Disable the Responses API in n8n
+>
+> The n8n **OpenAI Chat Model** node has a **"Responses API"** toggle that is **on by default**.
+> Vercel AI Gateway does **not** support this format for non-OpenAI models (including Claude).
+> Leaving it enabled causes silent failures or format errors with no obvious error message.
+>
+> **How to disable it:**
+> In your n8n workflow → AI Agent node → OpenAI Chat Model (sub-node) → Options → toggle **"Responses API" OFF**.
+>
+> Do this every time you create or clone the OpenAI Chat Model sub-node.
 
 ### n8n credential setup
 

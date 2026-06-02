@@ -6,7 +6,18 @@
 
 ---
 
-## What this adapter does
+## Two components, one n8n instance
+
+> **Common question:** Are `adapter-n8n-claude-opus` and `n8n` the same application?
+>
+> **No — they are separate, but you only need one n8n instance.**
+>
+> - **`n8n`** is the n8n application itself — the workflow engine, UI, and database. You may already have one running. You do **not** need to deploy a second one.
+> - **`adapter-n8n-claude-opus`** is a small TypeScript service that acts as the **NATS ↔ n8n bridge**. It knows nothing about Claude or Vercel. It receives AI-AO task envelopes from NATS, calls your n8n instance via webhook, waits for the result, and publishes AI-AO lifecycle events back onto NATS.
+>
+> **If you already run n8n:** set `ADAPTER_N8N_WORKFLOW_URL` to your existing instance's webhook URL and skip the bundled `n8n` Docker service entirely (omit `--profile n8n`). Only `adapter-n8n-claude-opus` needs to run as a new container.
+
+### What this adapter does
 
 This adapter bridges two things:
 
@@ -14,40 +25,41 @@ This adapter bridges two things:
 2. **n8n AI Agent** — the actual reasoning engine; an n8n workflow using the OpenAI Chat Model node pointed at Vercel AI Gateway, backed by `claude-opus-4.7`
 
 ```
-┌──────────────┐   NATS          ┌──────────────────────────┐
-│ Orchestrator │ ─────────────▶  │ adapter-n8n-claude-opus  │
-└──────────────┘  task.assigned  │  (TypeScript)            │
-       ▲                         │  • envelope → n8n payload│
-       │                         │  • poll n8n exec API     │
-       └──── NATS ───────────────│  • map result → event    │
-              task events        └────────────┬─────────────┘
-                                              │ POST /webhook/<id>
-                                              ▼
-                                 ┌────────────────────────────┐
-                                 │  n8n AI Agent workflow     │
-                                 │  ┌──────────────────────┐  │
-                                 │  │ OpenAI Chat Model    │  │
-                                 │  │ base_url:            │  │
-                                 │  │  ai-gateway.vercel.sh│  │
-                                 │  │ model:               │  │
-                                 │  │  anthropic/claude-   │  │
-                                 │  │  opus-4.7            │  │
-                                 │  └──────────────────────┘  │
-                                 │  + Tools (MCP, HTTP, etc.) │
-                                 └────────────────────────────┘
-                                              │
-                                              ▼
+┌──────────────┐   NATS          ┌──────────────────────────────────────┐
+│ Orchestrator │ ─────────────▶  │  adapter-n8n-claude-opus (TS)        │
+└──────────────┘  task.assigned  │  NATS ↔ n8n bridge                   │
+       ▲                         │  • validates envelope                 │
+       │                         │  • translates to n8n webhook payload  │
+       └──── NATS ───────────────│  • maps n8n result back to AI-AO event│
+              task events        └─────────────────┬────────────────────┘
+                                                   │ POST /webhook/<id>
+                                                   │ (to your n8n instance)
+                                                   ▼
+                                 ┌────────────────────────────────────────┐
+                                 │  n8n (your existing instance is fine)  │
+                                 │  AI Agent workflow                     │
+                                 │  ┌──────────────────────────────────┐  │
+                                 │  │ OpenAI Chat Model node           │  │
+                                 │  │  Base URL: ai-gateway.vercel.sh  │  │
+                                 │  │  Model: anthropic/claude-opus-4.7│  │
+                                 │  │  ⚠️  Responses API: DISABLED      │  │
+                                 │  └──────────────────────────────────┘  │
+                                 │  + Tools: HTTP, GitHub, Notion, etc.   │
+                                 └─────────────────┬──────────────────────┘
+                                                   │
+                                                   ▼
                                  ┌────────────────────────────┐
                                  │  Vercel AI Gateway         │
-                                 │  ai-gateway.vercel.sh      │
-                                 │  (OpenAI-compatible API)   │
-                                 └────────────────────────────┘
-                                              │
-                                              ▼
-                                 ┌────────────────────────────┐
-                                 │  Claude Opus 4.7           │
-                                 │  (Anthropic via Vercel)    │
-                                 └────────────────────────────┘
+                                 │  ai-gateway.vercel.sh/v1   │
+                                 │  (OpenAI-compatible API,   │
+                                 │   globally reachable)      │
+                                 └─────────────┬──────────────┘
+                                               │
+                                               ▼
+                                 ┌─────────────────────────────┐
+                                 │  Claude Opus 4.7            │
+                                 │  (Anthropic via Vercel)     │
+                                 └─────────────────────────────┘
 ```
 
 > For the canonical end-to-end notification flow see [`docs/AGENT-NOTIFICATION.md`](../../docs/AGENT-NOTIFICATION.md).
@@ -78,6 +90,23 @@ This adapter bridges two things:
 
 ---
 
+---
+
+> ## ⚠️ Critical: Disable the Responses API in n8n
+>
+> This is the **single most common silent failure** when setting up this adapter.
+>
+> The n8n **OpenAI Chat Model** node has a **"Responses API"** toggle that is on by default.
+> Vercel AI Gateway does **not** support the Responses API format for non-OpenAI models (including Claude).
+> If you leave it enabled, requests will fail silently or return a format error.
+>
+> **Where to find it:**
+> AI Agent node → OpenAI Chat Model (sub-node) → scroll to Options → toggle **"Responses API" OFF**
+>
+> This must be done every time you create or clone the OpenAI Chat Model sub-node.
+
+---
+
 ## n8n Workflow Setup
 
 ### Step 1 — Vercel AI Gateway credential in n8n
@@ -98,7 +127,7 @@ Create a workflow with a **Webhook trigger** (the adapter calls this) and attach
   - Chat Model: **OpenAI Chat Model**
     - Model: `anthropic/claude-opus-4.7`
     - Credential: the one created in Step 1
-    - ⚠️ **Disable the Responses API toggle** — Vercel gateway does not support the Responses API format for Anthropic models
+    - Options → **Responses API: OFF** ⚠️ *(see critical warning above — this must be disabled)*
   - Memory: **Window Buffer Memory** (session key = `task_id` from webhook payload)
   - Tools: add as needed (HTTP Request, GitHub, Notion, etc.)
 

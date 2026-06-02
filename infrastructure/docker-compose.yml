@@ -300,7 +300,19 @@ services:
       retries: 5
       start_period: 15s
 
-  # n8n self-hosted (optional — omit if using a separately deployed n8n)
+  # ---------------------------------------------------------------------------
+  # n8n self-hosted (OPTIONAL)
+  # ---------------------------------------------------------------------------
+  # Only deploy this service if you do NOT already have an n8n instance.
+  # If you already run n8n elsewhere on the same VM or on another host,
+  # simply set ADAPTER_N8N_WORKFLOW_URL in .env to point at that instance
+  # and start only adapter-n8n-claude-opus (--profile n8n-claude-opus).
+  #
+  # NOTE: adapter-n8n-claude-opus and n8n are SEPARATE services.
+  #   - n8n         = the n8n application (workflow engine, UI, database)
+  #   - adapter-*   = a small NATS<->n8n bridge; calls n8n via HTTP webhook
+  # One n8n instance handles both. You do NOT need two n8n installations.
+  # ---------------------------------------------------------------------------
   n8n:
     image: n8nio/n8n:latest
     container_name: aiao-n8n
