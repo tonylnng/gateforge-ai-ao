@@ -8,27 +8,23 @@ This document defines every concept in GateForge AI-AO. If you read only one doc
 
 AI-AO has **three substrates**, **two abstractions**, and **one protocol**.
 
-```
-                     ONE PROTOCOL
-              (task envelopes, events, agent cards)
-                          │
-                ┌─────────┴─────────┐
-                │                   │
-            TWO ABSTRACTIONS
-        ┌──────────────┐  ┌──────────────┐
-        │  Capability  │  │   Adapter    │
-        │  (what an    │  │  (how an     │
-        │  agent can   │  │  agent is    │
-        │  do)         │  │  reached)    │
-        └──────────────┘  └──────────────┘
-                          │
-                ┌─────────┴─────────┐
-                │                   │
-            THREE SUBSTRATES
-        ┌────┐  ┌────┐  ┌────┐
-        │Git │  │NATS│  │ S3 │
-        │mem │  │bus │  │art │
-        └────┘  └────┘  └────┘
+```mermaid
+flowchart TD
+    PROTO["ONE PROTOCOL\n(task envelopes, events, agent cards)"]
+
+    subgraph ABSTRACTIONS["TWO ABSTRACTIONS"]
+        CAP["Capability\n(what an agent can do)"]
+        ADP["Adapter\n(how an agent is reached)"]
+    end
+
+    subgraph SUBSTRATES["THREE SUBSTRATES"]
+        GIT["Git\nmemory"]
+        NATS["NATS\nbus"]
+        S3["S3\nartifacts"]
+    end
+
+    PROTO --> ABSTRACTIONS
+    ABSTRACTIONS --> SUBSTRATES
 ```
 
 ---
@@ -190,54 +186,25 @@ Every event is durable in NATS streams. Every significant state change is mirror
 
 A task's full lifecycle, end to end:
 
-```
-       ┌─────────┐
-   ┌──▶│ created │
-   │   └────┬────┘
-   │        │ orchestrator picks an agent based on capability
-   │        ▼
-   │   ┌──────────┐
-   │   │ assigned │──── (NATS: task.assigned)
-   │   └────┬─────┘
-   │        │ adapter picks up, validates, immediately acks
-   │        ▼
-   │   ┌──────────┐
-   │   │ accepted │──── (NATS: task.accepted, < 1s SLA)
-   │   └────┬─────┘
-   │        │ adapter invokes platform, streams progress
-   │        ▼
-   │   ┌──────────┐
-   │   │ working  │──── (NATS: task.progress, 0..N times)
-   │   └────┬─────┘
-   │        │ platform produces output
-   │        ▼
-   │   ┌─────────────────┐
-   │   │ verifying       │ (if verification.required)
-   │   └────┬────────────┘
-   │        │
-   │        ├──── verifier passes ────┐
-   │        │                         ▼
-   │        │                 ┌──────────────┐
-   │        │                 │  completed   │──── (NATS: task.completed)
-   │        │                 │  artifacts   │     Git commit to tasks/done/
-   │        │                 │  in MinIO    │     issue closed
-   │        │                 └──────────────┘
-   │        │
-   │        ├──── verifier fails ─────┐
-   │        │                         ▼
-   │        │                 ┌──────────────┐
-   │        │                 │  failed      │──── (NATS: task.failed)
-   │        │                 │  reason      │     Git commit to tasks/failed/
-   │        │                 │  recorded    │     escalation event
-   │        │                 └──────────────┘
-   │        │
-   │        └──── needs input ────────┐
-   │                                  ▼
-   │                          ┌──────────────────┐
-   │                          │ input_required   │
-   │                          └────────┬─────────┘
-   │                                   │ human or peer responds
-   └───────────────────────────────────┘
+```mermaid
+flowchart TD
+    CREATED["created"]
+    ASSIGNED["assigned\n(NATS: task.assigned)"]
+    ACCEPTED["accepted\n(NATS: task.accepted, < 1s SLA)"]
+    WORKING["working\n(NATS: task.progress, 0..N times)"]
+    VERIFYING["verifying\n(if verification.required)"]
+    COMPLETED["completed\n(NATS: task.completed)\nGit commit to tasks/done/\nissue closed"]
+    FAILED["failed\n(NATS: task.failed)\nGit commit to tasks/failed/\nescalation event"]
+    INPUT_REQ["input_required"]
+
+    CREATED -->|"orchestrator picks an agent based on capability"| ASSIGNED
+    ASSIGNED -->|"adapter picks up, validates, immediately acks"| ACCEPTED
+    ACCEPTED -->|"adapter invokes platform, streams progress"| WORKING
+    WORKING -->|"platform produces output"| VERIFYING
+    VERIFYING -->|"verifier passes"| COMPLETED
+    VERIFYING -->|"verifier fails"| FAILED
+    VERIFYING -->|"needs input"| INPUT_REQ
+    INPUT_REQ -->|"human or peer responds"| CREATED
 ```
 
 Every transition emits an event. Every event is durable. Every event carries the same `task_id` and `trace_id`. The full lifecycle is reconstructable from the event log alone.

@@ -15,16 +15,14 @@ OpenClaw is an in-house AI gateway framework (see [gateforge-openclaw-guideline]
 
 ## How it differs from API/browser adapters
 
-```
-┌────────────────────────┐       ┌────────────────────────┐
-│  Orchestrator          │──────▶│  OpenClaw adapter      │
-└────────────────────────┘  NATS │  (in same VM, native)  │
-                                 └─────────┬──────────────┘
-                                           │ direct func call
-                                           ▼
-                                 ┌────────────────────────┐
-                                 │  OpenClaw runtime      │
-                                 └────────────────────────┘
+```mermaid
+flowchart LR
+    ORCH["Orchestrator"]
+    ADP["OpenClaw adapter\n(in same VM, native)"]
+    OC["OpenClaw runtime"]
+
+    ORCH -->|"NATS"| ADP
+    ADP -->|"direct func call"| OC
 ```
 
 No outbound API calls. No browser. The adapter binary embeds (or links to) the OpenClaw runtime, so end-to-end latency is < 50 ms for task pickup.

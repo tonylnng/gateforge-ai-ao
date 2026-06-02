@@ -24,42 +24,31 @@ This adapter bridges two things:
 1. **AI-AO protocol** — receives task envelopes from NATS, publishes lifecycle events back
 2. **n8n AI Agent** — the actual reasoning engine; an n8n workflow using the OpenAI Chat Model node pointed at Vercel AI Gateway, backed by `claude-opus-4.7`
 
-```
-┌──────────────┐   NATS          ┌──────────────────────────────────────┐
-│ Orchestrator │ ─────────────▶  │  adapter-n8n-claude-opus (TS)        │
-└──────────────┘  task.assigned  │  NATS ↔ n8n bridge                   │
-       ▲                         │  • validates envelope                 │
-       │                         │  • translates to n8n webhook payload  │
-       └──── NATS ───────────────│  • maps n8n result back to AI-AO event│
-              task events        └─────────────────┬────────────────────┘
-                                                   │ POST /webhook/<id>
-                                                   │ (to your n8n instance)
-                                                   ▼
-                                 ┌────────────────────────────────────────┐
-                                 │  n8n (your existing instance is fine)  │
-                                 │  AI Agent workflow                     │
-                                 │  ┌──────────────────────────────────┐  │
-                                 │  │ OpenAI Chat Model node           │  │
-                                 │  │  Base URL: ai-gateway.vercel.sh  │  │
-                                 │  │  Model: anthropic/claude-opus-4.7│  │
-                                 │  │  ⚠️  Responses API: DISABLED      │  │
-                                 │  └──────────────────────────────────┘  │
-                                 │  + Tools: HTTP, GitHub, Notion, etc.   │
-                                 └─────────────────┬──────────────────────┘
-                                                   │
-                                                   ▼
-                                 ┌────────────────────────────┐
-                                 │  Vercel AI Gateway         │
-                                 │  ai-gateway.vercel.sh/v1   │
-                                 │  (OpenAI-compatible API,   │
-                                 │   globally reachable)      │
-                                 └─────────────┬──────────────┘
-                                               │
-                                               ▼
-                                 ┌─────────────────────────────┐
-                                 │  Claude Opus 4.7            │
-                                 │  (Anthropic via Vercel)     │
-                                 └─────────────────────────────┘
+```mermaid
+flowchart TD
+    ORCH["Orchestrator"]
+    ADP["adapter-n8n-claude-opus (TS)\nNATS ↔ n8n bridge\n• validates envelope\n• translates to n8n webhook payload\n• maps n8n result back to AI-AO event"]
+
+    subgraph N8N["n8n (your existing instance is fine)"]
+        WF["AI Agent workflow"]
+        subgraph NODE["OpenAI Chat Model node"]
+            BASE["Base URL: ai-gateway.vercel.sh"]
+            MODEL["Model: anthropic/claude-opus-4.7"]
+            RESP["⚠️ Responses API: DISABLED"]
+        end
+        TOOLS["+ Tools: HTTP, GitHub, Notion, etc."]
+        WF --> NODE
+        WF --> TOOLS
+    end
+
+    VERCEL["Vercel AI Gateway\nai-gateway.vercel.sh/v1\n(OpenAI-compatible API,\nglobally reachable)"]
+    CLAUDE["Claude Opus 4.7\n(Anthropic via Vercel)"]
+
+    ORCH -->|"NATS task.assigned"| ADP
+    ADP -->|"POST /webhook/<id>"| N8N
+    N8N -->|"result callback"| ADP
+    ADP -->|"NATS task events"| ORCH
+    N8N --> VERCEL --> CLAUDE
 ```
 
 > For the canonical end-to-end notification flow see [`docs/AGENT-NOTIFICATION.md`](../../docs/AGENT-NOTIFICATION.md).

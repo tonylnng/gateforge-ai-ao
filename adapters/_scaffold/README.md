@@ -2,7 +2,7 @@
 
 > **Use this as the starting point for any new adapter.** Copy the directory, rename, and follow the checklist.
 
-```
+```text
 adapters/_scaffold/
 ├── README.md                this file
 ├── agent-card.yaml          declarative metadata (capabilities, limits)
@@ -48,7 +48,7 @@ Every adapter MUST:
 
 ## Build it in 6 steps
 
-```text
+```bash
 1. cp -r adapters/_scaffold adapters/<your-name>
 2. Edit agent-card.yaml      → list real capabilities, set limits
 3. Implement handler         → src/handler.{go,ts,py}

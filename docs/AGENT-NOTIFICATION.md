@@ -16,9 +16,13 @@ This document is the canonical reference for the notification mechanism. See als
 
 AI-AO never "notifies" agents directly. Instead:
 
-```
-Orchestrator ──publish──▶ NATS subject ──deliver──▶ Adapter (subscribed)
-                          aiao.task.assigned.<agent_id>.>
+```mermaid
+flowchart LR
+    ORCH["Orchestrator"]
+    NATS["NATS subject\naiao.task.assigned.\n&lt;agent_id&gt;.&gt;"]
+    ADP["Adapter (subscribed)"]
+
+    ORCH -->|publish| NATS -->|deliver| ADP
 ```
 
 The **adapter** is the bridge. It holds a long-lived NATS subscription (durable consumer) and translates incoming task envelopes into whatever the underlying agent speaks — API call, browser action, native function call.
@@ -29,38 +33,20 @@ So "AI-AO notifies Manus/Perplexity" really means **"the adapter receives a NATS
 
 ## Perplexity Computer — API-based adapter
 
-```
-┌──────────────┐  1. publish      ┌──────────────────────┐
-│ Orchestrator │ ───────────────▶ │ NATS JetStream       │
-└──────────────┘  aiao.task.      │  (durable consumer)  │
-                  assigned.       └──────────┬───────────┘
-                  pplx/v1.<id>               │ 2. deliver
-                                              ▼
-                                    ┌────────────────────┐
-                                    │ adapter-pplx (TS)  │
-                                    │  • ack ≤ 100ms     │
-                                    │  • emit "started"  │
-                                    └─────────┬──────────┘
-                                              │ 3. HTTPS POST /tasks
-                                              ▼
-                                    ┌────────────────────┐
-                                    │ Perplexity API     │
-                                    │  returns task_id   │
-                                    └─────────┬──────────┘
-                                              │ 4. webhook
-                                              ▼
-                                    ┌────────────────────┐
-                                    │ adapter-pplx       │
-                                    │  /webhook/pplx     │
-                                    │  HMAC verified     │
-                                    └─────────┬──────────┘
-                                              │ 5. translate to event
-                                              ▼
-                                    ┌────────────────────┐
-                                    │ NATS publish       │
-                                    │ aiao.event.        │
-                                    │   completed.<id>   │
-                                    └────────────────────┘
+```mermaid
+sequenceDiagram
+    participant Orchestrator
+    participant NATS as NATS JetStream\n(durable consumer)
+    participant Adapter as adapter-pplx (TS)\n• ack ≤ 100ms\n• emit "started"
+    participant API as Perplexity API\nreturns task_id
+    participant Webhook as adapter-pplx\n/webhook/pplx\nHMAC verified
+    participant NATSOut as NATS publish\naiao.event.\ncompleted.&lt;id&gt;
+
+    Orchestrator->>NATS: 1. publish\naiao.task.assigned.pplx/v1.&lt;id&gt;
+    NATS->>Adapter: 2. deliver
+    Adapter->>API: 3. HTTPS POST /tasks
+    API->>Webhook: 4. webhook
+    Webhook->>NATSOut: 5. translate to event
 ```
 
 **Outbound (orchestrator → Computer):** the adapter calls the Perplexity API. That's a simple HTTPS request triggered by the NATS delivery — no polling.
@@ -75,40 +61,20 @@ If the agent doesn't support webhooks for some operation, the adapter uses **str
 
 Manus has no API, so the adapter pretends to be a human:
 
-```
-┌──────────────┐  1. publish      ┌──────────────────────┐
-│ Orchestrator │ ───────────────▶ │ NATS JetStream       │
-└──────────────┘  aiao.task.      └──────────┬───────────┘
-                  assigned.                  │ 2. deliver
-                  manus/v1.<id>              ▼
-                                    ┌────────────────────┐
-                                    │ adapter-manus (TS) │
-                                    │  • ack ≤ 100ms     │
-                                    │  • leases a browser│
-                                    └─────────┬──────────┘
-                                              │ 3. Playwright actions
-                                              ▼
-                                    ┌────────────────────┐
-                                    │ Headless Chromium  │
-                                    │  • storageState    │
-                                    │  • navigate, type  │
-                                    │  • submit form     │
-                                    └─────────┬──────────┘
-                                              │ 4. listen for DOM events
-                                              ▼  (MutationObserver / waitForSelector)
-                                    ┌────────────────────┐
-                                    │ adapter-manus      │
-                                    │  • detect "done"   │
-                                    │  • screenshot→S3   │
-                                    │  • extract output  │
-                                    └─────────┬──────────┘
-                                              │ 5. publish
-                                              ▼
-                                    ┌────────────────────┐
-                                    │ NATS event         │
-                                    │ aiao.event.        │
-                                    │   completed.<id>   │
-                                    └────────────────────┘
+```mermaid
+sequenceDiagram
+    participant Orchestrator
+    participant NATS as NATS JetStream
+    participant Adapter as adapter-manus (TS)\n• ack ≤ 100ms\n• leases a browser
+    participant Browser as Headless Chromium\n• storageState\n• navigate, type\n• submit form
+    participant DOM as adapter-manus\n• detect "done"\n• screenshot→S3\n• extract output
+    participant NATSOut as NATS event\naiao.event.\ncompleted.&lt;id&gt;
+
+    Orchestrator->>NATS: 1. publish\naiao.task.assigned.manus/v1.&lt;id&gt;
+    NATS->>Adapter: 2. deliver
+    Adapter->>Browser: 3. Playwright actions
+    Browser->>DOM: 4. listen for DOM events\n(MutationObserver / waitForSelector)
+    DOM->>NATSOut: 5. publish
 ```
 
 **Outbound:** the adapter drives Chromium via Playwright — clicks, types, submits.

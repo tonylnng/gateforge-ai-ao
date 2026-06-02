@@ -17,17 +17,39 @@ The single most useful debugging surface in a distributed system. Set this up ea
 
 ## Architecture
 
-```
-[Orchestrator]──┐
-[Adapter A]────┤
-[Adapter B]────┼──▶ [OTel Collector] ──┬──▶ [Tempo] ──┐
-[NATS exporter]┤                       ├──▶ [Loki]  ──┼──▶ [Grafana]
-[MinIO]────────┤                       └──▶ [Prometheus*] ┘
-[Postgres]─────┘
+```mermaid
+flowchart LR
+    ORCH["Orchestrator"]
+    ADA["Adapter A"]
+    ADB["Adapter B"]
+    NATS_EXP["NATS exporter"]
+    MINIO_SVC["MinIO"]
+    PG_SVC["Postgres"]
 
-* Prometheus is built into Grafana via the embedded scraper for our scale.
-  At larger scale, run a standalone Prometheus.
+    OTEL["OTel Collector"]
+
+    TEMPO["Tempo"]
+    LOKI["Loki"]
+    PROM["Prometheus*"]
+    GRAFANA["Grafana"]
+
+    ORCH --> OTEL
+    ADA --> OTEL
+    ADB --> OTEL
+    NATS_EXP --> OTEL
+    MINIO_SVC --> OTEL
+    PG_SVC --> OTEL
+
+    OTEL --> TEMPO
+    OTEL --> LOKI
+    OTEL --> PROM
+
+    TEMPO --> GRAFANA
+    LOKI --> GRAFANA
+    PROM --> GRAFANA
 ```
+
+> \* Prometheus is built into Grafana via the embedded scraper for our scale. At larger scale, run a standalone Prometheus.
 
 Every AI-AO service exports OTLP. NATS metrics are scraped via `nats-exporter`. MinIO and Postgres metrics are scraped via their built-in endpoints.
 

@@ -7,7 +7,7 @@ The TypeScript SDK targets two audiences:
 1. **Adapter authors** building API-based adapters (e.g., the Perplexity Computer adapter is TS).
 2. **Admin Portal & dashboards** that need to subscribe to live events from a browser/Node.
 
-```
+```text
 sdk/typescript/
 ├── packages/
 │   ├── client/             nats.ws + REST helpers (browser-safe)

@@ -23,18 +23,24 @@ Use this adapter only when no API is available.
 
 ## Architecture
 
-```
-┌─────────────┐  NATS   ┌────────────────────────┐
-│ Orchestrator│────────▶│ adapter-manus (TS)     │
-└─────────────┘         │  ┌──────────────────┐  │
-       ▲                │  │ Playwright pool  │──┼──▶ manus.im (UI)
-       │                │  │  • headless      │  │
-       │                │  │  • session reuse │  │
-       └─── NATS ───────│  │  • DOM events    │  │
-                        │  └──────────────────┘  │
-                        │  • output extraction   │
-                        │  • screenshot to S3    │
-                        └────────────────────────┘
+```mermaid
+flowchart LR
+    ORCH["Orchestrator"]
+    ADP["adapter-manus (TS)"]
+
+    subgraph BROWSER["Browser Automation"]
+        PW["Playwright pool\n• headless\n• session reuse\n• DOM events"]
+    end
+
+    MANUS["manus.im (UI)"]
+    MINIO["MinIO (S3)\nscreenshots"]
+
+    ORCH -->|"NATS"| ADP
+    ADP --> PW
+    PW -->|"Browser actions"| MANUS
+    MANUS -->|"DOM events"| PW
+    ADP -->|"output extraction\nscreenshot"| MINIO
+    ADP -->|"NATS events"| ORCH
 ```
 
 > **For the canonical end-to-end notification flow** (how a NATS message becomes a Playwright action and a DOM event becomes a NATS event), see [`docs/AGENT-NOTIFICATION.md`](../../docs/AGENT-NOTIFICATION.md).

@@ -6,29 +6,26 @@ The orchestrator is the **stateless control plane** for AI-AO. It dispatches tas
 
 ## What the orchestrator does
 
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                          ORCHESTRATOR                                   │
-│                                                                         │
-│   ┌──────────┐   ┌──────────┐   ┌──────────┐   ┌──────────────────┐    │
-│   │ Ingress  │   │ Router   │   │ Watchdog │   │  Cost Aggregator │    │
-│   │ (HTTP)   │──▶│ (policy) │──▶│  (timeouts) │ │   (events→PG)   │    │
-│   └──────────┘   └─────┬────┘   └──────────┘   └─────────┬────────┘    │
-│         │              │                                  │             │
-│         │              ▼                                  ▼             │
-│         │         NATS publish                       Postgres           │
-│         │      (aiao.task.assigned.*)                (rollups)          │
-│         │              │                                                 │
-│         │              ▼                                                 │
-│         │       Adapters consume                                         │
-│         │              │                                                 │
-│         │              ▼                                                 │
-│         │       NATS publish (aiao.event.*)                              │
-│         │              │                                                 │
-│         ▼              ▼                                                 │
-│   Git writer ◀──── Audit signer ──── Audit log mirror (PG)              │
-│   (decisions+state)                                                      │
-└─────────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph ORCH["ORCHESTRATOR"]
+        INGRESS["Ingress\n(HTTP)"]
+        ROUTER["Router\n(policy)"]
+        WATCHDOG["Watchdog\n(timeouts)"]
+        COST["Cost Aggregator\n(events→PG)"]
+        AUDIT["Audit signer"]
+        GITWRIT["Git writer\n(decisions+state)"]
+        PG["Postgres\n(rollups)"]
+
+        INGRESS --> ROUTER
+        ROUTER --> WATCHDOG
+        ROUTER -->|NATS publish\naiao.task.assigned.*| ADP["Adapters consume"]
+        ADP -->|NATS publish\naiao.event.*| COST
+        COST --> PG
+        ADP --> AUDIT
+        AUDIT --> GITWRIT
+        AUDIT -->|Audit log mirror| PG
+    end
 ```
 
 ## Components

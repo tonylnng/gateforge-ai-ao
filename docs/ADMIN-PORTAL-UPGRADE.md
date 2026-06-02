@@ -8,29 +8,26 @@
 
 ## TL;DR — what changes, at a glance
 
-```
-Current Admin Portal                          Upgraded Admin Portal (AI-AO-aligned)
-─────────────────────────                     ───────────────────────────────────────
+```mermaid
+flowchart LR
+    subgraph CURRENT["Current Admin Portal"]
+        C1["Next.js 14 (UI)\nExpress backend\n── reads ──\nSQLite (read model)\nSSE proxy\nStatic 'tower' view"]
+    end
 
-┌─────────────────────────┐                   ┌──────────────────────────────────────┐
-│  Next.js 14 (UI)        │                   │  Next.js 14 (UI)                     │
-│  Express backend        │                   │  Express backend (control-plane only)│
-│  ── reads ──             │                   │  ── reads via NATS+PG ──             │
-│  SQLite (read model)    │                   │  ❌ SQLite removed                    │
-│  SSE proxy              │                   │  ✅ NATS subscribe (server-side)      │
-│  Static "tower" view    │                   │  ✅ Two-way control actions           │
-└─────────────────────────┘                   │  ✅ Trace + cost + verification views │
-                                              │  ✅ Git-as-source-of-record reads     │
-                                              └──────────────────────────────────────┘
+    subgraph UPGRADED["Upgraded Admin Portal (AI-AO-aligned)"]
+        U1["Next.js 14 (UI)\nExpress backend (control-plane only)\n── reads via NATS+PG ──\n❌ SQLite removed\n✅ NATS subscribe (server-side)\n✅ Two-way control actions\n✅ Trace + cost + verification views\n✅ Git-as-source-of-record reads"]
+    end
 
-         What stays                    What changes                      What's added
-         ──────────                    ────────────                      ────────────
-         Next.js 14 + Tailwind         SQLite → consume AI-AO PG          Control actions API
-         SSE pattern (UI side)         SSE → nats.ws subscribe            Cost & Budget module
-         Auth model                    Health probes → AI-AO /healthz     Trace Explorer (Grafana iframe)
-                                                                          Verification Dashboard
-                                                                          Policy editor (read-only first)
+    CURRENT -->|upgrade| UPGRADED
 ```
+
+| What stays | What changes | What's added |
+|------------|--------------|--------------|
+| Next.js 14 + Tailwind | SQLite → consume AI-AO PG | Control actions API |
+| SSE pattern (UI side) | SSE → nats.ws subscribe | Cost & Budget module |
+| Auth model | Health probes → AI-AO /healthz | Trace Explorer (Grafana iframe) |
+| | | Verification Dashboard |
+| | | Policy editor (read-only first) |
 
 ---
 
@@ -55,44 +52,30 @@ We do not throw the portal away. We **promote it**.
 
 ## Target architecture
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                          UPGRADED ADMIN PORTAL                              │
-│                                                                             │
-│  ┌──────────────────────────┐         ┌──────────────────────────────────┐  │
-│  │ Next.js 14 (App Router)  │ ──────▶ │ Server Actions / Route Handlers  │  │
-│  │  • React Server Comps    │  fetch  │  • call orchestrator HTTP API    │  │
-│  │  • SSE consumer (UI)     │         │  • verify NATS subscription auth │  │
-│  └────────────┬─────────────┘         └────────────────┬─────────────────┘  │
-│               │                                         │                    │
-│               │ EventSource (SSE relay)                 ▼                    │
-│               │                       ┌────────────────────────────────────┐ │
-│               │                       │ Express service (NEW responsibility)│ │
-│               │                       │  • subscribes to aiao.event.>       │ │
-│               │                       │  • re-emits SSE for browsers        │ │
-│               │                       │  • read aggregates from PG          │ │
-│               │                       │  • read durable state from Git      │ │
-│               │                       └─────┬───────────────┬───────────────┘ │
-│               │                             │               │                 │
-└───────────────┼─────────────────────────────┼───────────────┼─────────────────┘
-                │                             │               │
-                │                             ▼               ▼
-        ┌───────▼────────┐        ┌──────────────────┐  ┌──────────────────────┐
-        │ Browser users  │        │ NATS JetStream    │  │ Postgres (orch-owned)│
-        └────────────────┘        │  aiao.event.>     │  │  task_costs          │
-                                  └──────────────────┘  │  audit_log           │
-                                                        │  breaker_state       │
-                                                        └──────────────────────┘
+```mermaid
+flowchart TD
+    USERS["Browser users"]
 
-                                  ┌──────────────────┐
-                                  │ Git (system of   │  read-only via gh API  ◀─┐
-                                  │  record)         │  for ADRs, audits      │ │
-                                  └──────────────────┘                          │
-                                                                                │
-                                  ┌──────────────────┐                          │
-                                  │ Orchestrator API │  control actions only ◀──┘
-                                  │ /v1/...          │
-                                  └──────────────────┘
+    subgraph PORTAL["UPGRADED ADMIN PORTAL"]
+        NEXTJS["Next.js 14 (App Router)\n• React Server Comps\n• SSE consumer (UI)"]
+        HANDLERS["Server Actions / Route Handlers\n• call orchestrator HTTP API\n• verify NATS subscription auth"]
+        EXPRESS["Express service (NEW responsibility)\n• subscribes to aiao.event.>\n• re-emits SSE for browsers\n• read aggregates from PG\n• read durable state from Git"]
+
+        NEXTJS -->|fetch| HANDLERS
+        HANDLERS --> EXPRESS
+        NEXTJS -->|EventSource (SSE relay)| EXPRESS
+    end
+
+    NATS_SVC["NATS JetStream\naiao.event.>"]
+    PG["Postgres (orch-owned)\ntask_costs\naudit_log\nbreaker_state"]
+    GIT_SVC["Git (system of record)\nread-only via gh API\nfor ADRs, audits"]
+    ORCH_API["Orchestrator API\n/v1/...\ncontrol actions only"]
+
+    USERS --> PORTAL
+    EXPRESS --> NATS_SVC
+    EXPRESS --> PG
+    EXPRESS --> GIT_SVC
+    EXPRESS --> ORCH_API
 ```
 
 ### Three integration surfaces
@@ -156,7 +139,7 @@ Audit every interval/`setInterval`. AI-AO's third guarantee is **no polling**. A
 
 The flagship view. One row per task, live from NATS, drilldown to per-event timeline.
 
-```
+```text
 ┌──────────────────────────────────────────────────────────────────┐
 │ Tasks                                              [filter: live]│
 ├──────────────────────────────────────────────────────────────────┤
@@ -178,7 +161,7 @@ Click row → Timeline:
 
 Bar charts driven by `task_costs` rollups. Surface budget caps from `policy.yaml`.
 
-```
+```text
 Daily spend     [█████████░░░░░░░░░░░] 24.10 / 50.00 USD   (cap)
 By agent
   pplx/v1       [███████████░░░░░░░░░] 14.30 / 25.00 USD
@@ -194,7 +177,7 @@ By agent
 
 For the GateForge Guideline workflow that promotes artifacts to Git: show diff, verification checks (lint, tests, ADR present), and an **Approve / Reject** action that calls the orchestrator's `/v1/tasks/:id:redirect`.
 
-```
+```text
 Pending verification (3)
   ▸ task 7f3...   research bundle   [3 files, 24 KB]
        ✓ schema valid   ✓ ADR linked   ✗ test missing   [Approve] [Reject]

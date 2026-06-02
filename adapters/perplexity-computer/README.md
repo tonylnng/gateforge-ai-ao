@@ -15,19 +15,18 @@ Perplexity Computer is an API-accessible agent that excels at research, browsing
 
 ## Architecture
 
-```
-┌─────────────┐    NATS      ┌─────────────────────┐    HTTPS    ┌────────────────┐
-│ Orchestrator│ ───────────▶ │ adapter-pplx (TS)   │ ──────────▶ │ Perplexity API │
-└─────────────┘              │  • envelope→request │             └────────────────┘
-       ▲                     │  • stream→event     │                     │
-       └────── NATS ─────────│  • cost extraction  │ ◀──── webhook ──────┘
-                             │  • artifact upload  │
-                             └─────────────────────┘
-                                       │
-                                       ▼
-                                ┌──────────────┐
-                                │ MinIO (S3)   │
-                                └──────────────┘
+```mermaid
+flowchart LR
+    ORCH["Orchestrator"]
+    ADP["adapter-pplx (TS)\n• envelope→request\n• stream→event\n• cost extraction\n• artifact upload"]
+    API["Perplexity API"]
+    MINIO["MinIO (S3)"]
+
+    ORCH -->|"NATS"| ADP
+    ADP -->|"HTTPS"| API
+    API -->|"webhook"| ADP
+    ADP -->|"NATS"| ORCH
+    ADP --> MINIO
 ```
 
 > **For the canonical end-to-end notification flow** (how a NATS message becomes an API call and a webhook becomes a NATS event), see [`docs/AGENT-NOTIFICATION.md`](../../docs/AGENT-NOTIFICATION.md).

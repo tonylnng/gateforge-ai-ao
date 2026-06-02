@@ -22,27 +22,16 @@ AI-AO mediates between trusted internal services (orchestrator, native adapters,
 
 ## Layered controls
 
-```
-┌─────────────────────────────────────────────────────────┐
-│ External agent (least trust)                            │
-│  → output schema-validated, sanitized, classification-  │
-│    enforced before re-entering the bus                  │
-└────────────────────┬────────────────────────────────────┘
-                     │ adapter (mediates)
-┌────────────────────┴────────────────────────────────────┐
-│ Adapter                                                 │
-│  → per-agent JWT, scoped subjects                       │
-│  → mTLS to internal services                            │
-│  → secrets injected, never read from bus                │
-└────────────────────┬────────────────────────────────────┘
-                     │ NATS (signed messages)
-┌────────────────────┴────────────────────────────────────┐
-│ Internal core                                           │
-│  → mTLS between all services                            │
-│  → secrets in Docker secrets / file mounts              │
-│  → signed commits to Git                                │
-│  → audit firehose persisted independently               │
-└─────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    EXT["External agent (least trust)\n→ output schema-validated, sanitized,\n   classification-enforced before re-entering the bus"]
+
+    ADP["Adapter\n→ per-agent JWT, scoped subjects\n→ mTLS to internal services\n→ secrets injected, never read from bus"]
+
+    CORE["Internal core\n→ mTLS between all services\n→ secrets in Docker secrets / file mounts\n→ signed commits to Git\n→ audit firehose persisted independently"]
+
+    EXT -->|"adapter mediates"| ADP
+    ADP -->|"NATS (signed messages)"| CORE
 ```
 
 ---

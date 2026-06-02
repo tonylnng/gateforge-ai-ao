@@ -6,35 +6,27 @@ Read this **before** running anything. If you skip ahead to install commands, yo
 
 ## The full stack
 
-```
-┌────────────────────────────────────────────────────────────────────────┐
-│                          AI-AO Single-VM Stack                         │
-│                                                                        │
-│  ┌──────────────────────────┐   ┌──────────────────────────────────┐   │
-│  │      ORCHESTRATOR        │   │        ADAPTERS (N)              │   │
-│  │  (Go, port 8080)         │   │  · openclaw                      │   │
-│  │  · receives webhooks     │◀──│  · perplexity-computer           │   │
-│  │  · routes by capability  │   │  · manus                         │   │
-│  │  · reflects to Git       │   │  · ...                           │   │
-│  └──────────┬───────────────┘   └────────────┬─────────────────────┘   │
-│             │                                │                         │
-│             ▼                                ▼                         │
-│  ┌──────────────────────────────────────────────────────────────┐      │
-│  │                       NATS JetStream                         │      │
-│  │   ports 4222 (clients), 8222 (mon), 6222 (cluster)           │      │
-│  │   · streams: TASKS, AGENTS, REGISTRY, AUDIT, DLQ             │      │
-│  │   · KV: agents, seen, task_state, policy                     │      │
-│  └──────────────────────────────────────────────────────────────┘      │
-│                                                                        │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────────┐      │
-│  │   MinIO      │  │  Postgres    │  │   Observability          │      │
-│  │  port 9000   │  │  port 5432   │  │  · OTel Collector :4317  │      │
-│  │  · artifacts │  │  · cost agg  │  │  · Tempo :3200 (traces)  │      │
-│  │  · per-proj  │  │  · audit     │  │  · Loki :3100 (logs)     │      │
-│  │    buckets   │  │    longterm  │  │  · Grafana :3000 (UI)    │      │
-│  └──────────────┘  └──────────────┘  └──────────────────────────┘      │
-│                                                                        │
-└────────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph STACK["AI-AO Single-VM Stack"]
+        subgraph CTRL["Control Layer"]
+            ORCH["ORCHESTRATOR\n(Go, port 8080)\n· receives webhooks\n· routes by capability\n· reflects to Git"]
+            ADP["ADAPTERS (N)\n· openclaw\n· perplexity-computer\n· manus\n· ..."]
+            ORCH <--> ADP
+        end
+
+        NATS["NATS JetStream\nports 4222 (clients), 8222 (mon), 6222 (cluster)\n· streams: TASKS, AGENTS, REGISTRY, AUDIT, DLQ\n· KV: agents, seen, task_state, policy"]
+
+        CTRL --> NATS
+
+        subgraph STORAGE["Storage & Observability"]
+            MINIO["MinIO\nport 9000\n· artifacts\n· per-proj buckets"]
+            PG["Postgres\nport 5432\n· cost agg\n· audit longterm"]
+            OBS["Observability\n· OTel Collector :4317\n· Tempo :3200 (traces)\n· Loki :3100 (logs)\n· Grafana :3000 (UI)"]
+        end
+
+        NATS --> STORAGE
+    end
 ```
 
 All services are Docker containers, orchestrated by `docker compose` from `infrastructure/docker-compose.yml`.
@@ -110,25 +102,19 @@ All services are Docker containers, orchestrated by `docker compose` from `infra
 
 ## Production layout (when you outgrow single-VM)
 
-```
-                    ┌─────────────────────────────┐
-                    │     Caddy / Load Balancer   │
-                    │     (TLS termination)       │
-                    └──────────────┬──────────────┘
-                                   │
-            ┌──────────────────────┼──────────────────────┐
-            │                      │                      │
-   ┌────────┴────────┐    ┌────────┴────────┐    ┌────────┴────────┐
-   │   VM 1: NATS    │    │   VM 2: Apps    │    │   VM 3: Storage │
-   │  3-node cluster │    │  Orchestrator + │    │  MinIO +        │
-   │                 │    │  Adapters       │    │  Postgres       │
-   └─────────────────┘    └─────────────────┘    └─────────────────┘
-                                   │
-                          ┌────────┴────────┐
-                          │ VM 4: Observ.   │
-                          │ OTel + Tempo +  │
-                          │ Loki + Grafana  │
-                          └─────────────────┘
+```mermaid
+flowchart TD
+    LB["Caddy / Load Balancer\n(TLS termination)"]
+
+    VM1["VM 1: NATS\n3-node cluster"]
+    VM2["VM 2: Apps\nOrchestrator + Adapters"]
+    VM3["VM 3: Storage\nMinIO + Postgres"]
+    VM4["VM 4: Observability\nOTel + Tempo + Loki + Grafana"]
+
+    LB --> VM1
+    LB --> VM2
+    LB --> VM3
+    VM2 --> VM4
 ```
 
 The `docker-compose.yml` in this repo defaults to single-VM. The `docker-compose.prod.yml` overrides for multi-VM. Both are kept in sync.

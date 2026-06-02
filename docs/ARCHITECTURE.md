@@ -6,37 +6,16 @@ This document explains the architecture of GateForge AI-AO in depth. For a highe
 
 ## Layered view
 
-```
-┌──────────────────────────────────────────────────────────────────────┐
-│                         LAYER 6 — INTERFACES                         │
-│           Humans (Admin Portal, Git UI)  ·  External Triggers        │
-└──────────────────────────────────────────────────────────────────────┘
-┌──────────────────────────────────────────────────────────────────────┐
-│                       LAYER 5 — METHODOLOGY                          │
-│        Optional. Maps domain concepts (phases, roles, gates)         │
-│        onto AI-AO primitives. e.g. GateForge Guideline.              │
-│              ★ AI-AO does not require this layer to exist ★          │
-└──────────────────────────────────────────────────────────────────────┘
-┌──────────────────────────────────────────────────────────────────────┐
-│                      LAYER 4 — ORCHESTRATION                         │
-│   Orchestrator  ·  Agent Registry  ·  Policy & Verifier Engine       │
-│                  Routing · SLA enforcement · Audit                   │
-└──────────────────────────────────────────────────────────────────────┘
-┌──────────────────────────────────────────────────────────────────────┐
-│                       LAYER 3 — PROTOCOL                             │
-│   Task envelope  ·  Events  ·  Agent cards  ·  Error taxonomy        │
-│              JSON Schema · SemVer · Conformance suite                │
-└──────────────────────────────────────────────────────────────────────┘
-┌──────────────────────────────────────────────────────────────────────┐
-│                       LAYER 2 — TRANSPORT                            │
-│      NATS JetStream   ·   GitHub webhooks   ·   HTTP control API     │
-└──────────────────────────────────────────────────────────────────────┘
-┌──────────────────────────────────────────────────────────────────────┐
-│                      LAYER 1 — SUBSTRATE                             │
-│   GitHub (memory)  ·  NATS (nervous system)  ·  MinIO (artifacts)    │
-│                  Postgres (cost/audit aggregation)                   │
-│                  OTel + Tempo + Loki + Grafana                       │
-└──────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    L6["LAYER 6 — INTERFACES\nHumans (Admin Portal, Git UI) · External Triggers"]
+    L5["LAYER 5 — METHODOLOGY\nOptional. Maps domain concepts (phases, roles, gates)\nonto AI-AO primitives. e.g. GateForge Guideline.\n★ AI-AO does not require this layer to exist ★"]
+    L4["LAYER 4 — ORCHESTRATION\nOrchestrator · Agent Registry · Policy & Verifier Engine\nRouting · SLA enforcement · Audit"]
+    L3["LAYER 3 — PROTOCOL\nTask envelope · Events · Agent cards · Error taxonomy\nJSON Schema · SemVer · Conformance suite"]
+    L2["LAYER 2 — TRANSPORT\nNATS JetStream · GitHub webhooks · HTTP control API"]
+    L1["LAYER 1 — SUBSTRATE\nGitHub (memory) · NATS (nervous system) · MinIO (artifacts)\nPostgres (cost/audit aggregation)\nOTel + Tempo + Loki + Grafana"]
+
+    L6 --> L5 --> L4 --> L3 --> L2 --> L1
 ```
 
 Lower layers are stable. Higher layers iterate freely. The protocol (Layer 3) is the contract between the lower stack (everyone implements) and the higher stack (everyone consumes).
@@ -45,61 +24,54 @@ Lower layers are stable. Higher layers iterate freely. The protocol (Layer 3) is
 
 ## Component diagram
 
-```
-                                     ┌─────────────────┐
-                                     │   GitHub.com    │
-                                     │  (per-project   │
-                                     │      repo)      │
-                                     └────┬────────▲───┘
-                                  webhooks│        │ commits
-                                          ▼        │
-┌───────────────────────────────────────────────────────────────────┐
-│                       AI-AO Control Plane                         │
-│                                                                   │
-│  ┌──────────────────────────────────────────────────────────┐     │
-│  │             Orchestrator (Go service)                    │     │
-│  │  · receives webhooks                                     │     │
-│  │  · reads agent registry (NATS KV)                        │     │
-│  │  · routes tasks by capability                            │     │
-│  │  · subscribes to lifecycle events                        │     │
-│  │  · mirrors significant events to Git                     │     │
-│  │  · enforces policy (budget/autonomy/circuit breakers)    │     │
-│  └─────┬───────────────┬─────────────────┬────────────────┬─┘     │
-│        │ pub/sub       │ KV              │ http           │ http  │
-│        ▼               ▼                 ▼                ▼       │
-│  ┌──────────┐   ┌──────────┐      ┌──────────┐    ┌──────────┐    │
-│  │   NATS   │   │ NATS KV  │      │ Policy   │    │ Verifier │    │
-│  │JetStream │   │(registry)│      │  Engine  │    │  Engine  │    │
-│  └────┬─────┘   └──────────┘      └──────────┘    └──────────┘    │
-│       │                                                           │
-│       │ subjects: project.*.task.*  agent.*  registry.*  audit.*  │
-│       │                                                           │
-│  ┌────┴──────┬────────────────┬────────────────┬───────────────┐  │
-│  ▼           ▼                ▼                ▼               ▼  │
-│ ┌──────┐  ┌──────────┐    ┌─────────┐    ┌─────────┐    ┌────────┐│
-│ │Open- │  │Perplexity│    │  Manus  │    │ ChatGPT │    │ Custom ││
-│ │Claw  │  │ Computer │    │ adapter │    │  Agent  │    │adapter ││
-│ │adapt.│  │ adapter  │    │         │    │ adapter │    │        ││
-│ └──┬───┘  └────┬─────┘    └────┬────┘    └────┬────┘    └───┬────┘│
-│    │           │               │              │            │     │
-└────┼───────────┼───────────────┼──────────────┼────────────┼─────┘
-     │ NATS      │ HTTPS API     │ Browser      │ Browser    │ ...
-     │ (native)  │               │ automation   │ automation │
-     ▼           ▼               ▼              ▼            ▼
-┌─────────┐ ┌──────────┐   ┌──────────┐    ┌─────────┐   ┌────────┐
-│OpenClaw │ │Perplexity│   │  Manus   │    │ ChatGPT │   │ Custom │
-│  VMs    │ │ Computer │   │  (SaaS)  │    │  Agent  │   │ agent  │
-│         │ │  (SaaS)  │   │          │    │ (SaaS)  │   │        │
-└─────────┘ └──────────┘   └──────────┘    └─────────┘   └────────┘
+```mermaid
+flowchart TD
+    GH["GitHub.com\n(per-project repo)"]
 
-         ┌───────────────────────────────────────────────────┐
-         │                  Storage layer                    │
-         │  ┌──────────┐  ┌──────────┐  ┌──────────────────┐ │
-         │  │  MinIO   │  │ Postgres │  │   OTel + Tempo   │ │
-         │  │ (S3 API) │  │  (cost,  │  │   + Loki +       │ │
-         │  │          │  │  audit)  │  │   Grafana        │ │
-         │  └──────────┘  └──────────┘  └──────────────────┘ │
-         └───────────────────────────────────────────────────┘
+    subgraph CP["AI-AO Control Plane"]
+        subgraph ORCH_BOX["Orchestrator (Go service)"]
+            ORCH_DESC["· receives webhooks\n· reads agent registry (NATS KV)\n· routes tasks by capability\n· subscribes to lifecycle events\n· mirrors significant events to Git\n· enforces policy (budget/autonomy/circuit breakers)"]
+        end
+
+        NATS["NATS JetStream"]
+        NATSKVBOX["NATS KV\n(registry)"]
+        POLICY["Policy Engine"]
+        VERIFIER["Verifier Engine"]
+
+        ORCH_BOX -->|pub/sub| NATS
+        ORCH_BOX -->|KV| NATSKVBOX
+        ORCH_BOX -->|http| POLICY
+        ORCH_BOX -->|http| VERIFIER
+
+        subgraph ADAPTERS["Adapters (subjects: project.*.task.*  agent.*  registry.*  audit.*)"]
+            AD_OC["OpenClaw\nadapter"]
+            AD_PC["Perplexity Computer\nadapter"]
+            AD_MN["Manus\nadapter"]
+            AD_CG["ChatGPT Agent\nadapter"]
+            AD_CU["Custom\nadapter"]
+        end
+
+        NATS --> AD_OC
+        NATS --> AD_PC
+        NATS --> AD_MN
+        NATS --> AD_CG
+        NATS --> AD_CU
+    end
+
+    subgraph STORAGE["Storage layer"]
+        MINIO["MinIO\n(S3 API)"]
+        PG["Postgres\n(cost, audit)"]
+        OTEL["OTel + Tempo\n+ Loki + Grafana"]
+    end
+
+    GH -->|webhooks| CP
+    CP -->|commits| GH
+    AD_OC -->|NATS (native)| OC_VM["OpenClaw VMs"]
+    AD_PC -->|HTTPS API| PC_SAAS["Perplexity Computer\n(SaaS)"]
+    AD_MN -->|Browser automation| MN_SAAS["Manus (SaaS)"]
+    AD_CG -->|Browser automation| CG_SAAS["ChatGPT Agent\n(SaaS)"]
+    AD_CU --> CU_SAAS["Custom agent"]
+    CP --> STORAGE
 ```
 
 All adapter services and storage components run on **your VM** (single-VM dev) or across a small fleet (production). See [`install/`](../install/) for sizing.
@@ -108,39 +80,31 @@ All adapter services and storage components run on **your VM** (single-VM dev) o
 
 ## Data flow: a task in motion
 
-```
-HUMAN          GITHUB        ORCHESTRATOR     NATS         ADAPTER       PLATFORM       MINIO
-  │              │                │             │             │              │            │
-  │── file ─────▶│                │             │             │              │            │
-  │   issue      │── webhook ────▶│             │             │              │            │
-  │              │                │── pick      │             │              │            │
-  │              │                │   agent     │             │              │            │
-  │              │                │             │             │              │            │
-  │              │◀── commit ─────│             │             │              │            │
-  │              │   task.md      │             │             │              │            │
-  │              │                │── publish ─▶│             │              │            │
-  │              │                │   assigned  │── route ───▶│              │            │
-  │              │                │             │             │── invoke ───▶│            │
-  │              │                │             │◀── ack ─────│              │            │
-  │              │                │◀── accepted │             │              │            │
-  │              │                │             │             │              │            │
-  │              │                │             │◀── progress │              │            │
-  │              │                │◀── progress │             │              │            │
-  │              │                │             │             │              │            │
-  │              │                │             │             │◀── result ───│            │
-  │              │                │             │             │── store ──────────────────▶│
-  │              │                │             │             │              │            │
-  │              │                │             │             │── publish ──▶│            │
-  │              │                │             │              completed     │            │
-  │              │                │             │◀── completed                            │
-  │              │                │◀── completed│                                          │
-  │              │                │── commit ──────────────────────────────────────────────│
-  │              │◀── commit ─────│                                                        │
-  │              │   done/T-X.md  │                                                        │
-  │              │                │                                                        │
-  │── issue      │                │                                                        │
-  │   closed ───▶│                                                                         │
-  │              │                                                                         │
+```mermaid
+sequenceDiagram
+    participant Human
+    participant GitHub
+    participant Orchestrator
+    participant NATS
+    participant Adapter
+    participant Platform
+    participant MinIO
+
+    Human->>GitHub: file issue
+    GitHub->>Orchestrator: webhook
+    Orchestrator->>Orchestrator: pick agent
+    Orchestrator->>GitHub: commit task.md
+    Orchestrator->>NATS: publish assigned
+    NATS->>Adapter: route
+    Adapter->>Platform: invoke
+    Adapter->>NATS: ack
+    NATS->>Orchestrator: accepted
+    Platform->>Adapter: result
+    Adapter->>MinIO: store artifact
+    Adapter->>NATS: publish completed
+    NATS->>Orchestrator: completed
+    Orchestrator->>GitHub: commit done/T-X.md
+    GitHub->>Human: issue closed
 ```
 
 Every arrow is durable, traced, and audited. The bus carries the live signal; Git carries the durable record; MinIO carries the bytes.
@@ -164,43 +128,19 @@ Three substrates, each playing to its strengths, costs only modest operational c
 
 ## Trust boundaries
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                       TRUST: HIGHEST                        │
-│  Your VM (orchestrator, NATS, MinIO, Postgres, adapters)    │
-│  · mTLS between services                                    │
-│  · NATS auth via per-agent JWTs                             │
-│  · Secrets in /opt/secrets/ai-ao.env (never in Git)         │
-└─────────────────────────────────────────────────────────────┘
-                          │
-                          │ signed messages, signed commits
-                          ▼
-┌─────────────────────────────────────────────────────────────┐
-│                       TRUST: HIGH                           │
-│  GitHub repos                                               │
-│  · branch protection on main                                │
-│  · GitHub App with fine-grained per-repo permissions        │
-│  · signed commits required                                  │
-└─────────────────────────────────────────────────────────────┘
-                          │
-                          │ scoped credentials per platform
-                          ▼
-┌─────────────────────────────────────────────────────────────┐
-│                       TRUST: MEDIUM                         │
-│  Native agents (OpenClaw fleet)                             │
-│  · authenticated to NATS via JWT                            │
-│  · cannot escape their assigned subject namespace           │
-└─────────────────────────────────────────────────────────────┘
-                          │
-                          │ adapter mediates                  │
-                          ▼
-┌─────────────────────────────────────────────────────────────┐
-│                       TRUST: LOWEST                         │
-│  External SaaS agents (Perplexity Computer, Manus, etc.)    │
-│  · only see what their adapter sends them                   │
-│  · output validated against schema before re-entering bus   │
-│  · per-platform data classification policy enforced         │
-└─────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    EXT["TRUST: LOWEST\nExternal SaaS agents (Perplexity Computer, Manus, etc.)\n· only see what their adapter sends them\n· output validated against schema before re-entering bus\n· per-platform data classification policy enforced"]
+
+    NATIVE["TRUST: MEDIUM\nNative agents (OpenClaw fleet)\n· authenticated to NATS via JWT\n· cannot escape their assigned subject namespace"]
+
+    GH_TRUST["TRUST: HIGH\nGitHub repos\n· branch protection on main\n· GitHub App with fine-grained per-repo permissions\n· signed commits required"]
+
+    CORE["TRUST: HIGHEST\nYour VM (orchestrator, NATS, MinIO, Postgres, adapters)\n· mTLS between services\n· NATS auth via per-agent JWTs\n· Secrets in /opt/secrets/ai-ao.env (never in Git)"]
+
+    EXT -->|"adapter mediates"| NATIVE
+    NATIVE -->|"scoped credentials per platform"| GH_TRUST
+    GH_TRUST -->|"signed messages, signed commits"| CORE
 ```
 
 External agents are never trusted directly. Every output crossing back into the trusted core is schema-validated, sanitized, and tagged with provenance.

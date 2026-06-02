@@ -12,19 +12,16 @@
 
 You bring the agents — OpenClaw, Perplexity Computer, Manus, ChatGPT Agent, custom in-house agents, future agents that don't exist yet. AI-AO gives them a common language, a shared event bus, a durable system of record, and an audit trail. They get a way to delegate tasks to each other, acknowledge each other in real time, and reconcile results — all without any one platform owning the orchestration layer.
 
-```
-                ┌──────────────────────────────────────────────────────┐
-                │                    GateForge AI-AO                   │
-                │                                                      │
-                │   Protocol  ·  Transport  ·  Adapters  ·  SDK        │
-                └──────────────────────────────────────────────────────┘
-                                          │
-        ┌──────────────┬──────────────┬───┴────────┬──────────────┬──────────────┐
-        ▼              ▼              ▼            ▼              ▼              ▼
-  ┌───────────┐  ┌───────────┐  ┌──────────┐  ┌─────────┐  ┌────────────┐  ┌──────────┐
-  │  OpenClaw │  │ Perplexity│  │  Manus   │  │ ChatGPT │  │  Custom    │  │  Future  │
-  │   fleet   │  │  Computer │  │          │  │  Agent  │  │  agents    │  │  vendors │
-  └───────────┘  └───────────┘  └──────────┘  └─────────┘  └────────────┘  └──────────┘
+```mermaid
+flowchart TD
+    AIAO["GateForge AI-AO\nProtocol · Transport · Adapters · SDK"]
+
+    AIAO --> OC["OpenClaw\nfleet"]
+    AIAO --> PC["Perplexity\nComputer"]
+    AIAO --> MN["Manus"]
+    AIAO --> CG["ChatGPT\nAgent"]
+    AIAO --> CA["Custom\nagents"]
+    AIAO --> FV["Future\nvendors"]
 ```
 
 ---
@@ -52,44 +49,43 @@ AI-AO replaces those with a single substrate where every agent is a peer behind 
 
 ## High-level architecture
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    GitHub (per-project repo)                    │
-│   System of record · Tasks · Decisions · Artifacts (refs) ·     │
-│   AGENTS.md registry · Protocol schemas · Audit trail           │
-└───────────────────────┬─────────────────────────────────────────┘
-                        │ webhooks ↕ Git API
-┌───────────────────────┴─────────────────────────────────────────┐
-│                AI-AO Control Plane (your VM)                    │
-│                                                                 │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────┐   │
-│  │ Orchestrator │  │ Agent        │  │ Policy & Verifier    │   │
-│  │ (router +    │  │ Registry     │  │ Engine               │   │
-│  │ task         │  │ (capability  │  │ (guardrails,         │   │
-│  │ lifecycle)   │  │ discovery)   │  │ verification)        │   │
-│  └──────┬───────┘  └──────┬───────┘  └──────────┬───────────┘   │
-│         │                 │                     │               │
-│  ┌──────┴─────────────────┴─────────────────────┴───────────┐   │
-│  │              NATS JetStream (message bus)                │   │
-│  │   subjects: project.*.task.*  agent.*  registry.*        │   │
-│  └──────┬─────────────────┬─────────────────┬───────────────┘   │
-│         │                 │                 │                   │
-│  ┌──────┴─────┐    ┌──────┴─────┐    ┌──────┴──────┐            │
-│  │ OpenClaw   │    │ Perplexity │    │ Manus       │  ... more  │
-│  │ Adapter    │    │ Computer   │    │ Adapter     │  adapters  │
-│  │ (native)   │    │ Adapter    │    │             │            │
-│  └──────┬─────┘    └──────┬─────┘    └──────┬──────┘            │
-│         │                 │                 │                   │
-│  ┌──────┴─────────────────┴─────────────────┴───────────┐       │
-│  │   MinIO (S3) · Postgres · OTel + Grafana + Tempo     │       │
-│  └──────────────────────────────────────────────────────┘       │
-└─────────────────────────────────────────────────────────────────┘
-                        │
-                        ↓
-   ┌─────────────────┐  ┌─────────────────┐  ┌──────────────┐
-   │ OpenClaw VMs    │  │ Perplexity      │  │ Manus        │  ...
-   │ (your agents)   │  │ Computer (SaaS) │  │ (SaaS)       │
-   └─────────────────┘  └─────────────────┘  └──────────────┘
+```mermaid
+flowchart TD
+    GH["GitHub (per-project repo)\nSystem of record · Tasks · Decisions\nArtifacts (refs) · AGENTS.md · Audit trail"]
+
+    subgraph CP["AI-AO Control Plane (your VM)"]
+        ORCH["Orchestrator\nrouter + task lifecycle"]
+        REG["Agent Registry\ncapability discovery"]
+        POLICY["Policy & Verifier Engine\nguardrails, verification"]
+
+        subgraph BUS["NATS JetStream (message bus)\nsubjects: project.*.task.*  agent.*  registry.*"]
+            OCA["OpenClaw Adapter\n(native)"]
+            PCA["Perplexity Computer\nAdapter"]
+            MA["Manus Adapter"]
+            MORE["… more adapters"]
+        end
+
+        STORE["MinIO (S3) · Postgres · OTel + Grafana + Tempo"]
+
+        ORCH --- REG
+        ORCH --- POLICY
+        ORCH --> BUS
+        REG --> BUS
+        POLICY --> BUS
+        BUS --> STORE
+    end
+
+    subgraph AGENTS["Agent Platforms"]
+        OCVM["OpenClaw VMs\n(your agents)"]
+        PCSAAS["Perplexity Computer\n(SaaS)"]
+        MSAAS["Manus\n(SaaS)"]
+        MORE2["…"]
+    end
+
+    GH <-->|"webhooks ↕ Git API"| CP
+    OCA --> OCVM
+    PCA --> PCSAAS
+    MA --> MSAAS
 ```
 
 **Three substrates, each doing what it's best at:**
@@ -104,7 +100,7 @@ AI-AO replaces those with a single substrate where every agent is a peer behind 
 
 ## Repository layout
 
-```
+```text
 gateforge-ai-ao/
 │
 ├── README.md                          # ← you are here

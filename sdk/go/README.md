@@ -4,7 +4,7 @@
 
 The Go SDK is the canonical reference because the orchestrator is also written in Go. Anything the SDK can do, the orchestrator can verify behaviorally.
 
-```
+```text
 sdk/go/
 ├── client/                 NATS + HTTP client — connect, publish, subscribe
 ├── envelope/               Task envelope marshal/validate (uses /protocol/schema)

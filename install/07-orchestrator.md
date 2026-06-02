@@ -6,13 +6,20 @@ The "prime AI" router service. Receives webhooks, routes by capability, watches 
 
 ## What it does
 
-```
-GitHub webhook ─▶ Orchestrator ─▶ NATS subject ─▶ Adapter ─▶ Platform
-                       │
-                       ├─▶ NATS KV (registry, seen, task_state)
-                       ├─▶ Postgres (cost, audit aggregates, breakers)
-                       ├─▶ Git (commits, issue updates)
-                       └─▶ OTel (traces, metrics, logs)
+```mermaid
+flowchart LR
+    GH["GitHub webhook"]
+    ORCH["Orchestrator"]
+    NATS_SVC["NATS subject"]
+    ADP["Adapter"]
+    PLAT["Platform"]
+
+    GH --> ORCH --> NATS_SVC --> ADP --> PLAT
+
+    ORCH -->|NATS KV| KV["registry, seen, task_state"]
+    ORCH -->|Postgres| PG["cost, audit aggregates, breakers"]
+    ORCH -->|Git| GIT["commits, issue updates"]
+    ORCH -->|OTel| OTEL["traces, metrics, logs"]
 ```
 
 Stateless. Restart anytime. Pluggable.
